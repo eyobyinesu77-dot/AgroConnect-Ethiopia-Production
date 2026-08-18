@@ -1,7 +1,9 @@
 import axios from 'axios';
 
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+const BASE_URL =
+  import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
+// Main API instance
 const API = axios.create({
   baseURL: BASE_URL,
   withCredentials: true,
@@ -10,50 +12,68 @@ const API = axios.create({
   },
 });
 
-// Separate instance for file uploads (FormData bodies).
-// Deliberately has NO default Content-Type. If this shared instance's
-// 'application/json' default were reused as-is, axios's own transformRequest
-// logic checks the current Content-Type header and — when it sees
-// 'application/json' — JSON.stringifies the FormData instead of sending it
-// as a real multipart request, so the upload would silently break before it
-// even reaches the network. Leaving Content-Type unset here lets axios (and
-// ultimately the browser) detect the FormData body and set the correct
-// 'multipart/form-data; boundary=...' header itself, which is the only way
-// the boundary parameter needed for the server's multer parser gets set.
+// Separate API instance for file uploads.
+// Do NOT set Content-Type here because Axios/browser
+// must automatically create the multipart boundary.
 const uploadAPI = axios.create({
   baseURL: BASE_URL,
   withCredentials: true,
 });
 
-// Interceptor that automatically attaches the token from Storage
+// Automatically attach JWT token
 const attachToken = (config) => {
   const token = localStorage.getItem('token');
+
   if (token) {
+    config.headers = config.headers || {};
     config.headers.Authorization = `Bearer ${token}`;
   }
+
   return config;
 };
 
-const onRequestError = (error) => Promise.reject(error);
-
-API.interceptors.request.use(attachToken, onRequestError);
-uploadAPI.interceptors.request.use(attachToken, onRequestError);
-
-// If the token is missing/expired/invalid, the server responds 401 on any
-// protected route. Without this, every page would just show a scattered
-// "Not authorized" toast forever with no way back to a working state —
-// this clears the stale session and sends the user to log in again.
-const handleAuthError = (error) => {
-  if (error.response?.status === 401 && window.location.pathname !== '/login') {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    window.location.href = '/login';
-  }
+const onRequestError = (error) => {
   return Promise.reject(error);
 };
 
-API.interceptors.response.use((response) => response, handleAuthError);
-uploadAPI.interceptors.response.use((response) => response, handleAuthError);
+// Request interceptors
+API.interceptors.request.use(
+  attachToken,
+  onRequestError
+);
 
+uploadAPI.interceptors.request.use(
+  attachToken,
+  onRequestError
+);
+
+// Handle authentication errors
+const handleAuthError = (error) => {
+  if (
+    error.response?.status === 401 &&
+    window.location.pathname !== '/login'
+  ) {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+
+    window.location.href = '/login';
+  }
+
+  return Promise.reject(error);
+};
+
+// Response interceptors
+API.interceptors.response.use(
+  (response) => response,
+  handleAuthError
+);
+
+uploadAPI.interceptors.response.use(
+  (response) => response,
+  handleAuthError
+);
+
+// Exports
 export { uploadAPI };
+
 export default API;
