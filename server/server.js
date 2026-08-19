@@ -23,6 +23,15 @@ const allowedOrigins = (
   .split(',')
   .map((origin) => origin.trim())
   .filter(Boolean);
+console.log('CORS origins:', allowedOrigins);
+app.use((req, res, next) => {
+  console.log('🌐 Incoming request:', {
+    method: req.method,
+    path: req.path,
+    origin: req.headers.origin || 'NO_ORIGIN',
+  });
+  next();
+});
 
 app.use(
   cors({
