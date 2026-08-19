@@ -16,6 +16,7 @@ const PORT = process.env.PORT || 5000;
 connectDB();
 
 // Middleware
+console.log('CORS configured:', { hasClientUrl: Boolean(process.env.CLIENT_URL) });
 const allowedOrigins = (
   process.env.CLIENT_URL || 'http://localhost:5173'
 )
