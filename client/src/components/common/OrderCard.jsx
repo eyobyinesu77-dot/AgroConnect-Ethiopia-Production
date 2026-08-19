@@ -12,9 +12,10 @@ export default function OrderCard({ order, subtitle, total, actions, paymentProo
   const { t } = useLanguage();
   const colors = STATUS_COLORS[order.status] || STATUS_COLORS.Pending;
 
-  const fullProofUrl = paymentProofUrl 
-    ? (paymentProofUrl.startsWith('http') ? paymentProofUrl : `http://localhost:5000${paymentProofUrl}`)
-    : '';
+  const API_ORIGIN = (import.meta.env.VITE_API_URL || "http://localhost:5000/api").replace("/api", "");
+  const fullProofUrl = paymentProofUrl
+    ? (paymentProofUrl.startsWith("http") ? paymentProofUrl : `${API_ORIGIN}${paymentProofUrl}`)
+    : "";
 
   return (
     <div
