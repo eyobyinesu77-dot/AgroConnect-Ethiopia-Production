@@ -73,8 +73,24 @@ const loginUser = async (req, res) => {
       return res.status(400).json({ message: 'Email and password are required.' });
     }
 
-    const user = await User.findOne({ email });
-    if (user && (await bcrypt.compare(password, user.password))) {
+    const user = await User.findOne({ email }).select("+password");
+
+    console.log("LOGIN DEBUG:", {
+      email,
+      userFound: !!user,
+      role: user?.role,
+      passwordHashExists: !!user?.password,
+      passwordHashLength: user?.password?.length || 0,
+    });
+
+    const passwordMatches =
+      !!user && !!user.password && await bcrypt.compare(password, user.password);
+
+    console.log("PASSWORD DEBUG:", {
+      userFound: !!user,
+      passwordMatches,
+    });
+    if (user && passwordMatches) {
       res.json({
         _id: user._id,
         fullName: user.fullName,
