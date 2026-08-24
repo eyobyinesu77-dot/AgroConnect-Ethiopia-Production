@@ -42,12 +42,12 @@ export default function Navbar({ onMenuClick, dashboardPath }) {
               onClick={() => setIsMenuOpen((open) => !open)}
               aria-label={isMenuOpen ? 'Close menu' : 'Open menu'}
               aria-expanded={isMenuOpen}
-              className="md:hidden mr-2 p-2 rounded-md text-[#166534] hover:bg-[#dcfce7] transition-colors shrink-0"
+              className="md:hidden mr-3 p-1.5 rounded-md text-[#166534] hover:bg-[#dcfce7] transition-colors shrink-0"
             >
               {isMenuOpen ? (
-                <X className="h-6 w-6" />
+                <X className="h-5 w-5" />
               ) : (
-                <Menu className="h-6 w-6" />
+                <Menu className="h-5 w-5" />
               )}
             </button>
 
@@ -169,7 +169,7 @@ export default function Navbar({ onMenuClick, dashboardPath }) {
         aria-label="Open menu"
         style={{ background: 'none', border: 'none', color: '#166534', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '0.25rem' }}
       >
-        <Menu className="h-6 w-6" />
+        <Menu className="h-5 w-5" />
       </button>
 
       {dashboardPath && (
