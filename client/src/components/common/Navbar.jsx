@@ -48,7 +48,7 @@ export default function Navbar({ onMenuClick, dashboardPath }) {
             </Link>
 
             {/* Nav links — centered row, large screens only */}
-            <div className="hidden lg:flex items-center gap-1">
+            <div className="hidden md:flex items-center gap-1">
               {navLinks.map((item) => (
                 <Link
                   key={item.path}
@@ -65,7 +65,7 @@ export default function Navbar({ onMenuClick, dashboardPath }) {
             </div>
 
             {/* Login / Register — far right, large screens only */}
-            <div className="hidden lg:flex items-center gap-3">
+            <div className="hidden md:flex items-center gap-3">
               <Link
                 to="/login"
                 className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
@@ -89,7 +89,7 @@ export default function Navbar({ onMenuClick, dashboardPath }) {
               onClick={() => setIsMenuOpen((open) => !open)}
               aria-label={isMenuOpen ? 'Close menu' : 'Open menu'}
               aria-expanded={isMenuOpen}
-              className="lg:hidden p-2 rounded-md text-[#166534] hover:bg-green-50 transition-colors"
+              className="md:hidden p-2 rounded-md text-[#166534] hover:bg-green-50 transition-colors"
             >
               {isMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
             </button>
@@ -98,7 +98,7 @@ export default function Navbar({ onMenuClick, dashboardPath }) {
 
         {/* Mobile & tablet dropdown menu */}
         {isMenuOpen && (
-          <div className="lg:hidden border-t border-green-100 bg-[#f9fafb] px-4 pb-4 pt-2">
+          <div className="md:hidden border-t border-green-100 bg-[#f9fafb] px-4 pb-4 pt-2">
             <div className="flex flex-col gap-1">
               {navLinks.map((item) => (
                 <Link
@@ -144,7 +144,7 @@ export default function Navbar({ onMenuClick, dashboardPath }) {
   // Authenticated dashboard bar
   return (
     <nav
-      className="lg:hidden"
+      className="md:hidden"
       style={{
         padding: '0.75rem 1.5rem',
         background: '#f9fafb',
