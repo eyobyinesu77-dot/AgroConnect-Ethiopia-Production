@@ -55,8 +55,8 @@ export default function Navbar({ onMenuClick, dashboardPath }) {
                   to={item.path}
                   className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
                     isActive(item.path)
-                      ? 'text-[#166534] bg-green-100'
-                      : 'text-gray-600 hover:text-[#166534] hover:bg-green-50'
+                      ? 'text-[#166534] bg-[#dcfce7]'
+                      : 'text-[#166534] hover:text-[#14532d] hover:bg-[#ecfdf5]'
                   }`}
                 >
                   {item.label}
@@ -70,15 +70,15 @@ export default function Navbar({ onMenuClick, dashboardPath }) {
                 to="/login"
                 className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
                   isActive('/login')
-                    ? 'text-[#166534] bg-green-100'
-                    : 'text-gray-600 hover:text-[#166534] hover:bg-green-50'
+                    ? 'text-[#166534] bg-[#dcfce7]'
+                    : 'text-[#166534] hover:text-[#14532d] hover:bg-[#ecfdf5]'
                 }`}
               >
                 Login
               </Link>
               <Link
                 to="/register"
-                className="px-4 py-2 rounded-md text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 shadow-sm transition-colors"
+                className="px-4 py-2 rounded-md text-sm font-semibold text-white bg-[#16a34a] hover:bg-[#15803d] shadow-sm transition-colors"
               >
                 Register
               </Link>
@@ -89,7 +89,7 @@ export default function Navbar({ onMenuClick, dashboardPath }) {
               onClick={() => setIsMenuOpen((open) => !open)}
               aria-label={isMenuOpen ? 'Close menu' : 'Open menu'}
               aria-expanded={isMenuOpen}
-              className="md:hidden p-2 rounded-md text-[#166534] hover:bg-green-50 transition-colors"
+              className="md:hidden ml-auto p-2 rounded-md text-[#166534] hover:bg-green-50 transition-colors"
             >
               {isMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
             </button>
@@ -107,8 +107,8 @@ export default function Navbar({ onMenuClick, dashboardPath }) {
                   onClick={() => setIsMenuOpen(false)}
                   className={`px-3 py-2.5 rounded-md text-sm font-medium transition-colors ${
                     isActive(item.path)
-                      ? 'text-[#166534] bg-green-100'
-                      : 'text-gray-600 hover:text-[#166534] hover:bg-green-50'
+                      ? 'text-[#166534] bg-[#dcfce7]'
+                      : 'text-[#166534] hover:text-[#14532d] hover:bg-[#ecfdf5]'
                   }`}
                 >
                   {item.label}
@@ -120,8 +120,8 @@ export default function Navbar({ onMenuClick, dashboardPath }) {
                   onClick={() => setIsMenuOpen(false)}
                   className={`px-3 py-2.5 rounded-md text-sm font-medium text-center transition-colors ${
                     isActive('/login')
-                      ? 'text-[#166534] bg-green-100'
-                      : 'text-gray-600 hover:text-[#166534] hover:bg-green-50'
+                      ? 'text-[#166534] bg-[#dcfce7]'
+                      : 'text-[#166534] hover:text-[#14532d] hover:bg-[#ecfdf5]'
                   }`}
                 >
                   Login
@@ -129,7 +129,7 @@ export default function Navbar({ onMenuClick, dashboardPath }) {
                 <Link
                   to="/register"
                   onClick={() => setIsMenuOpen(false)}
-                  className="px-4 py-2.5 rounded-md text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 text-center shadow-sm transition-colors"
+                  className="px-4 py-2.5 rounded-md text-sm font-semibold text-white bg-[#16a34a] hover:bg-[#15803d] text-center shadow-sm transition-colors"
                 >
                   Register
                 </Link>
