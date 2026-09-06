@@ -40,6 +40,22 @@ const userSchema = new mongoose.Schema({
   // for extensionController.getFarmersList (an extension worker's own
   // farmer roster) and for future features that need a specific pairing.
   assignedExtensionWorker: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+
+  // --- Email verification ---
+  // isEmailVerified is informational only for now: it is set by the real
+  // verify-email flow below, but login is intentionally NOT gated on it so
+  // existing users (created before this field existed) are not locked out.
+  isEmailVerified: { type: Boolean, default: false },
+  // select: false — these are hashed tokens, never returned by default
+  // queries. Controllers that need them must explicitly .select('+field').
+  emailVerificationToken: { type: String, select: false },
+  emailVerificationExpires: { type: Date, select: false },
+
+  // --- Password reset ---
+  // Only ever stores a SHA-256 hash of the token that was emailed to the
+  // user, never the raw token itself.
+  passwordResetToken: { type: String, select: false },
+  passwordResetExpires: { type: Date, select: false },
 }, { timestamps: true });
 
 module.exports = mongoose.model('User', userSchema);
