@@ -1,0 +1,20 @@
+# Dependencies
+node_modules/
+
+# Environment secrets
+.env
+.env.local
+.env.*.local
+**/.env
+
+# Build / uploads
+dist/
+server/uploads/
+client/dist/
+
+# Logs & OS
+npm-debug.log*
+*.log
+.DS_Store
+.vscode/
+.idea/
