@@ -1,105 +1,68 @@
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 
-// Reads SMTP_HOST / SMTP_PORT / SMTP_USER / SMTP_PASS (server/.env.example).
-let cachedTransporter = null;
-
-const PLACEHOLDER_RE = /your_app_password|your_password|change_this|^<.*>$/i;
+let resendClient = null;
 
 const isConfigured = () =>
-  Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
+  Boolean(process.env.RESEND_API_KEY);
 
-const getTransporter = () => {
-  if (cachedTransporter) return cachedTransporter;
+const getResend = () => {
+  if (resendClient) return resendClient;
+
   if (!isConfigured()) return null;
 
-  // Short timeouts: if the host can't be reached (e.g. the hosting provider
-  // blocks outbound SMTP ports) the request fails in seconds with a real
-  // error instead of hanging the Forgot Password form for minutes.
-  cachedTransporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: Number(process.env.SMTP_PORT) || 587,
-    secure: Number(process.env.SMTP_PORT) === 465,
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-    },
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
-    socketTimeout: 15000,
-  });
-  return cachedTransporter;
-};
-
-const assertUsable = () => {
-  if (!isConfigured()) {
-    throw new Error(
-      'Email is not configured. Set SMTP_HOST, SMTP_USER and SMTP_PASS in server/.env (or the host\'s environment variables).'
-    );
-  }
-  if (PLACEHOLDER_RE.test(process.env.SMTP_PASS)) {
-    throw new Error(
-      'SMTP_PASS is still a placeholder. Use a real Gmail App Password (16 characters, requires 2-Step Verification).'
-    );
-  }
-};
-
-// Turns a raw Nodemailer error into a one-line, actionable server log hint.
-const hintFor = (err) => {
-  if (err.code === 'EAUTH') {
-    return 'SMTP login rejected. For Gmail, SMTP_USER must be the account and SMTP_PASS a 16-character App Password, not the normal account password.';
-  }
-  if (['ETIMEDOUT', 'ECONNECTION', 'ESOCKET', 'ECONNREFUSED', 'EDNS'].includes(err.code)) {
-    return 'Could not reach the SMTP server. Check SMTP_HOST/SMTP_PORT, and note some hosts block outbound SMTP ports 25/465/587 (e.g. Render free web services).';
-  }
-  return null;
+  resendClient = new Resend(process.env.RESEND_API_KEY);
+  return resendClient;
 };
 
 // options: { email, subject, message (plain text), html (optional) }
-// Resolves with the Nodemailer result ONLY if the SMTP server accepted the
-// recipient. Throws on missing/placeholder config, connection/auth errors,
-// or a rejected recipient — callers must not report "sent" unless this
-// resolves.
 const sendEmailOptions = async (options) => {
-  assertUsable();
-  const transporter = getTransporter();
-
-  const mailOptions = {
-    from: `"AgroConnect Ethiopia" <${process.env.SMTP_USER}>`,
-    to: options.email,
-    subject: options.subject,
-    text: options.message,
-    html: options.html,
-  };
-
-  let info;
-  try {
-    info = await transporter.sendMail(mailOptions);
-  } catch (err) {
-    const hint = hintFor(err);
-    if (hint) console.error(`✉️  SMTP hint [${err.code}]: ${hint}`);
-    throw err;
-  }
-
-  if (!info || !Array.isArray(info.accepted) || info.accepted.length === 0) {
+  if (!isConfigured()) {
     throw new Error(
-      `SMTP server did not accept the recipient (rejected: ${JSON.stringify(info && info.rejected)})`
+      'Email is not configured. Set RESEND_API_KEY in the server environment.'
     );
   }
-  return info;
-};
 
-// Real SMTP handshake + authentication against SMTP_HOST, without sending
-// anything. Used by scripts/verifyEmail.js.
-sendEmailOptions.verifyTransport = async () => {
-  assertUsable();
+  const resend = getResend();
+
   try {
-    await getTransporter().verify();
+    const { data, error } = await resend.emails.send({
+      from:
+        process.env.EMAIL_FROM ||
+        'AgroConnect Ethiopia <onboarding@resend.dev>',
+      to: [options.email],
+      subject: options.subject,
+      text: options.message,
+      html: options.html,
+    });
+
+    if (error) {
+      console.error('❌ Resend email error:', error);
+      throw new Error(error.message || 'Failed to send email');
+    }
+
+    if (!data || !data.id) {
+      throw new Error('Resend did not return an email ID');
+    }
+
+    console.log(`✉️ Email sent successfully via Resend: ${data.id}`);
+    return data;
   } catch (err) {
-    const hint = hintFor(err);
-    if (hint) console.error(`✉️  SMTP hint [${err.code}]: ${hint}`);
+    console.error('❌ Failed to send email via Resend:', err);
     throw err;
   }
 };
+
+// Kept for compatibility with existing verification scripts.
+sendEmailOptions.verifyTransport = async () => {
+  if (!isConfigured()) {
+    throw new Error(
+      'Email is not configured. Set RESEND_API_KEY in the server environment.'
+    );
+  }
+
+  return true;
+};
+
 sendEmailOptions.isConfigured = isConfigured;
 
 module.exports = sendEmailOptions;
