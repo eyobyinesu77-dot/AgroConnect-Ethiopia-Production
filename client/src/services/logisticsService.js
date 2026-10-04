@@ -6,6 +6,7 @@ export const logisticsService = {
   createProvider: async (data) => (await API.post('/transport-providers', data)).data,
   updateProvider: async (id, data) => (await API.put(`/transport-providers/${id}`, data)).data,
   deleteProvider: async (id) => (await API.delete(`/transport-providers/${id}`)).data,
+  seedProviders: async () => (await API.post('/transport-providers/seed')).data,
 
   // Requests (farmer / buyer)
   createRequest: async (data) => (await API.post('/logistics', data)).data,

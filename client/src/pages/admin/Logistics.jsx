@@ -59,26 +59,36 @@ export default function AdminLogistics() {
     }
   };
 
-  /** Prefer region+capacity match; if none, fall back to capacity-ok available providers so Assign is never blocked by region alone. */
+  /**
+   * Rank providers for a request:
+   * 1. Region + capacity match (best)
+   * 2. Capacity match any region
+   * 3. All available providers (even under-capacity) so the admin always sees options
+   *    and can still assign (backend will reject true under-capacity).
+   */
   const providersForRequest = (r) => {
-    const capacityOk = providers.filter((p) => p.capacityKg >= r.quantityKg);
+    if (!providers.length) return { list: [], matched: false, underCapacityOnly: false };
+
+    const capacityOk = providers.filter((p) => Number(p.capacityKg) >= Number(r.quantityKg));
     const matching = capacityOk.filter(
       (p) => Array.isArray(p.regionsServed) && p.regionsServed.includes(r.pickupRegion)
     );
-    if (matching.length > 0) return { list: matching, matched: true };
-    // Fallback: any available provider with enough capacity (region optional)
-    if (capacityOk.length > 0) return { list: capacityOk, matched: false };
-    return { list: [], matched: false };
+    if (matching.length > 0) return { list: matching, matched: true, underCapacityOnly: false };
+    if (capacityOk.length > 0) return { list: capacityOk, matched: false, underCapacityOnly: false };
+    // Last resort: show everyone so the dropdown is never blank when providers exist
+    return { list: providers, matched: false, underCapacityOnly: true };
   };
 
   const providersForBatch = (b) => {
-    const capacityOk = providers.filter((p) => p.capacityKg >= b.totalQuantityKg);
+    if (!providers.length) return { list: [], matched: false, underCapacityOnly: false };
+
+    const capacityOk = providers.filter((p) => Number(p.capacityKg) >= Number(b.totalQuantityKg));
     const matching = capacityOk.filter(
       (p) => Array.isArray(p.regionsServed) && p.regionsServed.includes(b.pickupRegion)
     );
-    if (matching.length > 0) return { list: matching, matched: true };
-    if (capacityOk.length > 0) return { list: capacityOk, matched: false };
-    return { list: [], matched: false };
+    if (matching.length > 0) return { list: matching, matched: true, underCapacityOnly: false };
+    if (capacityOk.length > 0) return { list: capacityOk, matched: false, underCapacityOnly: false };
+    return { list: providers, matched: false, underCapacityOnly: true };
   };
 
   const handleAssignRequest = (r) => {
@@ -99,26 +109,46 @@ export default function AdminLogistics() {
     run(b._id, () => logisticsService.assignBatchProvider(b._id, providerId), 'lg_assigned_ok');
   };
 
-  const renderProviderSelect = (id, options, matched) => (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', minWidth: '200px' }}>
+  const renderProviderSelect = (id, options, matched, underCapacityOnly = false) => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', minWidth: '220px' }}>
       <select
         value={choice[id] || ''}
-        onChange={(e) => setChoice({ ...choice, [id]: e.target.value })}
-        style={{ padding: '0.4rem', borderRadius: '4px', border: '1px solid #ccc', minWidth: '200px' }}
+        onChange={(e) => {
+          const v = e.target.value;
+          if (v === '__none__') return;
+          setChoice({ ...choice, [id]: v });
+        }}
+        style={{ padding: '0.4rem', borderRadius: '4px', border: '1px solid #ccc', minWidth: '220px' }}
         aria-label={t('lg_choose_provider')}
       >
         <option value="">{t('lg_choose_provider')}</option>
+        {options.length === 0 && (
+          <option value="__none__" disabled>
+            {t('lg_no_providers')}
+          </option>
+        )}
         {options.map((p) => (
           <option key={p._id} value={p._id}>
-            {p.name} ({formatNumber(p.capacityKg)} {t('unit_kg')}){p.phone ? ` · ${p.phone}` : ''}
+            {p.name} ({formatNumber(p.capacityKg)} {t('unit_kg')})
+            {p.phone ? ` · ${p.phone}` : ''}
           </option>
         ))}
       </select>
       {options.length === 0 && (
-        <span style={{ fontSize: '0.75rem', color: '#c62828' }}>{t('lg_no_providers')}</span>
+        <p style={{ margin: 0, fontSize: '0.8rem', color: '#c62828' }}>
+          {t('lg_no_providers')}{' '}
+          <a href="/admin/transport-providers" style={{ color: '#1565c0', textDecoration: 'underline' }}>
+            {t('nav_transport_providers') || 'Transport Providers'}
+          </a>
+        </p>
       )}
-      {options.length > 0 && !matched && (
+      {options.length > 0 && !matched && !underCapacityOnly && (
         <span style={{ fontSize: '0.75rem', color: '#e65100' }}>{t('lg_no_exact_match')}</span>
+      )}
+      {underCapacityOnly && (
+        <span style={{ fontSize: '0.75rem', color: '#c62828' }}>
+          No provider has enough capacity for this load. Assign will be rejected unless capacity is increased.
+        </span>
       )}
     </div>
   );
@@ -134,6 +164,30 @@ export default function AdminLogistics() {
   return (
     <div style={{ padding: '2rem', maxWidth: '1100px', margin: '0 auto' }}>
       <h2 style={{ color: '#1b5e20', marginBottom: '1.25rem' }}>{t('lg_admin_title')}</h2>
+
+      {providers.length === 0 && (
+        <div
+          style={{
+            backgroundColor: '#fff3e0',
+            border: '1px solid #ffcc80',
+            borderRadius: '8px',
+            padding: '0.9rem 1.1rem',
+            marginBottom: '1.25rem',
+            fontSize: '0.9rem',
+            color: '#e65100',
+          }}
+        >
+          {t('lg_no_providers')}{' '}
+          <a
+            href="/admin/transport-providers"
+            style={{ color: '#1565c0', fontWeight: 600, textDecoration: 'underline' }}
+          >
+            {t('nav_transport_providers') || 'Transport Providers'}
+          </a>
+          {' — '}Add at least one provider with capacity ≥ 5000 kg and the regions used in pending requests.
+        </div>
+      )}
+
       <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
         {tabs.map((x) => (
           <button
@@ -160,7 +214,7 @@ export default function AdminLogistics() {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
           {requests.map((r) => {
-            const { list: fits, matched } = providersForRequest(r);
+            const { list: fits, matched, underCapacityOnly } = providersForRequest(r);
             const isAssigning = assigning === r._id;
             return (
               <div key={r._id} style={cardStyle}>
@@ -185,7 +239,7 @@ export default function AdminLogistics() {
                 <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.5rem', alignItems: 'flex-start' }}>
                   {r.status === 'Pending' && (
                     <>
-                      {renderProviderSelect(r._id, fits, matched)}
+                      {renderProviderSelect(r._id, fits, matched, underCapacityOnly)}
                       <button
                         type="button"
                         disabled={isAssigning || providers.length === 0}
@@ -266,7 +320,7 @@ export default function AdminLogistics() {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
           {batches.map((b) => {
-            const { list: fits, matched } = providersForBatch(b);
+            const { list: fits, matched, underCapacityOnly } = providersForBatch(b);
             const isAssigning = assigning === b._id;
             return (
               <div key={b._id} style={cardStyle}>
@@ -293,7 +347,7 @@ export default function AdminLogistics() {
                 )}
                 {b.status === 'Open' && (
                   <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'flex-start', marginTop: '0.5rem' }}>
-                    {renderProviderSelect(b._id, fits, matched)}
+                    {renderProviderSelect(b._id, fits, matched, underCapacityOnly)}
                     <button
                       type="button"
                       disabled={isAssigning || providers.length === 0}

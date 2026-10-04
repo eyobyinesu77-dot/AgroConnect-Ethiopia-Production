@@ -35,16 +35,38 @@ export default function AdminTransportProviders() {
 
   const handleSave = async (e) => {
     e.preventDefault();
+    if (!form.name?.trim() || !form.phone?.trim()) {
+      toast.error('Name and phone are required.');
+      return;
+    }
+    if (!form.capacityKg || Number(form.capacityKg) < 1) {
+      toast.error('Capacity (kg) must be greater than 0. Use at least 5000 for typical maize loads.');
+      return;
+    }
+    if (!Array.isArray(form.regionsServed) || form.regionsServed.length === 0) {
+      toast.error('Select at least one region served (e.g. Amhara, Addis Ababa).');
+      return;
+    }
     setSaving(true);
     try {
-      const payload = { ...form, capacityKg: Number(form.capacityKg) };
+      const payload = {
+        ...form,
+        capacityKg: Number(form.capacityKg),
+        ratePerQuintalPerKm:
+          form.ratePerQuintalPerKm === '' || form.ratePerQuintalPerKm == null
+            ? undefined
+            : Number(form.ratePerQuintalPerKm),
+      };
       if (form._id) await logisticsService.updateProvider(form._id, payload);
       else await logisticsService.createProvider(payload);
       toast.success(t('lg_saved'));
       setForm(null);
       load();
     } catch (err) {
-      toast.error(t(apiErrorKey(err, 'lg_load_error', 'lg_load_error')));
+      const msg =
+        err?.response?.data?.message ||
+        t(apiErrorKey(err, 'lg_load_error', 'lg_load_error'));
+      toast.error(msg);
     } finally {
       setSaving(false);
     }
@@ -57,6 +79,17 @@ export default function AdminTransportProviders() {
       load();
     } catch (err) {
       toast.error(t(apiErrorKey(err, 'lg_load_error', 'lg_load_error')));
+    }
+  };
+
+  const handleSeed = async () => {
+    try {
+      const res = await logisticsService.seedProviders();
+      toast.success(res?.message || 'Demo providers added.');
+      load();
+    } catch (err) {
+      const msg = err?.response?.data?.message || t(apiErrorKey(err, 'lg_load_error', 'lg_load_error'));
+      toast.error(msg);
     }
   };
 
@@ -107,7 +140,19 @@ export default function AdminTransportProviders() {
       )}
 
       {providers.length === 0 ? (
-        <p style={{ color: '#666' }}>{t('lg_dir_empty')}</p>
+        <div style={{ color: '#666', padding: '1.5rem 0' }}>
+          <p>{t('lg_dir_empty')}</p>
+          <p style={{ fontSize: '0.9rem', marginTop: '0.5rem' }}>
+            Add a provider manually, or seed three demo transporters that cover the main regions and capacities used by pending requests.
+          </p>
+          <button
+            type="button"
+            onClick={handleSeed}
+            style={{ marginTop: '0.75rem', backgroundColor: '#1565c0', color: 'white', border: 'none', padding: '0.55rem 1rem', borderRadius: '4px', fontWeight: 600, cursor: 'pointer' }}
+          >
+            Seed demo providers
+          </button>
+        </div>
       ) : (
         <div style={{ backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 4px 10px rgba(0,0,0,0.05)', overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.88rem' }}>

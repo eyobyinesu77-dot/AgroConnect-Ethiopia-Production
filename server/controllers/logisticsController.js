@@ -457,8 +457,58 @@ const assignBatchProvider = async (req, res) => {
   }
 };
 
+
+// POST /api/transport-providers/seed (admin) — create a few demo providers if none exist
+const seedProviders = async (req, res) => {
+  try {
+    const count = await TransportProvider.countDocuments();
+    if (count > 0) {
+      return res.json({ message: `Already have ${count} provider(s). Nothing seeded.`, created: [] });
+    }
+    const samples = [
+      {
+        name: 'Abebe Heavy Transport',
+        phone: '0911223344',
+        vehicleType: 'Heavy Truck',
+        capacityKg: 15000,
+        regionsServed: ['Amhara', 'Addis Ababa', 'Oromia', 'Tigray', 'Dire Dawa'],
+        ratePerQuintalPerKm: 12,
+        isAvailable: true,
+        notes: 'Demo provider — long-haul',
+        createdBy: req.user._id,
+      },
+      {
+        name: 'Selam Isuzu Logistics',
+        phone: '0922334455',
+        vehicleType: 'Isuzu Truck',
+        capacityKg: 8000,
+        regionsServed: ['Oromia', 'Addis Ababa', 'Sidama', 'South West Ethiopia Peoples', 'Central Ethiopia'],
+        ratePerQuintalPerKm: 10,
+        isAvailable: true,
+        notes: 'Demo provider — central routes',
+        createdBy: req.user._id,
+      },
+      {
+        name: 'Hawassa Pickup Service',
+        phone: '0933445566',
+        vehicleType: 'Pickup',
+        capacityKg: 2000,
+        regionsServed: ['Sidama', 'South Ethiopia', 'Addis Ababa'],
+        ratePerQuintalPerKm: 15,
+        isAvailable: true,
+        notes: 'Demo provider — small loads',
+        createdBy: req.user._id,
+      },
+    ];
+    const created = await TransportProvider.insertMany(samples);
+    res.status(201).json({ message: `Seeded ${created.length} providers.`, created });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 module.exports = {
-  listProviders, createProvider, updateProvider, deleteProvider,
+  listProviders, createProvider, updateProvider, deleteProvider, seedProviders,
   createRequest, getMyRequests, cancelRequest, getAllRequests,
   getRequestMatches, assignProvider, updateRequestStatus,
   getAggregationSuggestions, createBatch, getBatches, assignBatchProvider,
