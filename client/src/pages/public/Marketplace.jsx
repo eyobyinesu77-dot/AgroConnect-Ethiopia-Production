@@ -34,22 +34,37 @@ export default function Marketplace() {
   const loadMarketplace = async () => {
     setIsLoading(true);
     setLoadError(null);
+
     try {
-      const [data, categories] = await Promise.all([
-        productService.getAllProducts(),
-        categoryService.getCategories(),
-      ]);
+      // Load products independently of categories.
+      const data = await productService.getAllProducts();
+
+      if (!Array.isArray(data)) {
+        throw new Error('The products API did not return an array.');
+      }
+
       setProducts(data);
-      setCategoryNames(categories.map((c) => c.name));
+
+      // Category failure must not prevent products from appearing.
+      try {
+        const categories = await categoryService.getCategories();
+
+        setCategoryNames(
+          Array.isArray(categories)
+            ? categories.map((category) => category.name).filter(Boolean)
+            : []
+        );
+      } catch (categoryError) {
+        console.error('Marketplace category loading failed:', categoryError);
+        setCategoryNames([]);
+      }
     } catch (error) {
-      // Distinguish "the server responded with an error" from "the request
-      // never reached the server at all" — the latter (error.response is
-      // undefined) almost always means the backend isn't running or isn't
-      // reachable, which needs a very different message than a normal
-      // application error.
+      console.error('Marketplace product loading failed:', error);
+
       const message = !error.response
         ? t('mkt_load_error_offline')
         : t(apiErrorKey(error, 'mkt_load_error_generic', 'mkt_load_error_generic'));
+
       setLoadError(message);
       toast.error(message);
     } finally {

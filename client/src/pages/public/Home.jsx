@@ -130,79 +130,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Marketplace Preview */}
-      <section className="max-w-7xl mx-auto w-full py-14 md:py-20 px-4 md:px-8">
-        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-8">
-          <div>
-            <h2 className="text-2xl md:text-3xl font-bold text-[#166534]">
-              {t('home_marketplace_title') || 'Fresh from Ethiopian Farms'}
-            </h2>
-            <p className="text-gray-600 mt-1 max-w-xl">
-              {t('home_marketplace_text') || 'Browse real agricultural products listed by local farmers.'}
-            </p>
-          </div>
-          <Link
-            to="/marketplace"
-            className="inline-flex items-center gap-1.5 text-emerald-700 hover:text-emerald-800 font-semibold text-sm shrink-0"
-          >
-            {t('home_view_all') || 'View all products'}
-            <ArrowRight className="w-4 h-4" />
-          </Link>
-        </div>
 
-        {loadingProducts && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="h-64 rounded-xl bg-gray-100 animate-pulse" />
-            ))}
-          </div>
-        )}
-
-        {!loadingProducts && productsError && (
-          <p className="text-center text-gray-500 py-8">
-            {t('home_products_error') || 'Unable to load products right now. Please try the marketplace.'}
-          </p>
-        )}
-
-        {!loadingProducts && !productsError && products.length === 0 && (
-          <p className="text-center text-gray-500 py-8">
-            {t('home_products_empty') || 'No products available yet. Check back soon.'}
-          </p>
-        )}
-
-        {!loadingProducts && products.length > 0 && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {products.map((product) => {
-              const id = product._id || product.id;
-              const name = product.name || product.cropName || product.title || 'Product';
-              const price = product.pricePerUnit ?? product.price;
-              const unit = product.unit || 'kg';
-              const img = product.image || product.images?.[0] || '/images/hero-marketplace.png';
-              const isSoldOut = product.listingStatus === 'Sold Out' || (product.stock ?? 1) < 1;
-              return (
-                <Link
-                  key={id}
-                  to={`/marketplace/${id}`}
-                  className={`block bg-white rounded-xl border border-green-100 shadow-sm hover:shadow-md transition-shadow overflow-hidden ${isSoldOut ? 'opacity-60' : ''}`}
-                >
-                  <div className="aspect-[4/3] bg-gray-100 overflow-hidden">
-                    <img src={img} alt={name} className="w-full h-full object-cover" loading="lazy" onError={(e) => { e.target.src = '/images/hero-marketplace.png'; }} />
-                  </div>
-                  <div className="p-4">
-                    <h3 className="font-semibold text-[#166534] text-base truncate">{name}</h3>
-                    {price != null && (
-                      <p className="text-emerald-700 font-bold mt-1">
-                        {typeof price === 'number' ? price.toLocaleString() : price} ETB / {unit}
-                      </p>
-                    )}
-                    {isSoldOut && <span className="text-xs text-red-600 font-medium">Sold out</span>}
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
-        )}
-      </section>
 
       {/* Features */}
       <section className="bg-white border-y border-green-100">

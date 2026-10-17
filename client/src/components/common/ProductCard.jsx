@@ -72,12 +72,10 @@ export default function ProductCard({ product, onAddToCart, onBuyNow, onWishlist
             }}
             onError={(e) => {
               e.target.style.display = 'none';
-              const fallback = e.target.parentElement?.querySelector('[data-fallback]');
               if (fallback) fallback.style.display = 'block';
             }}
           />
         ) : null}
-        <span data-fallback style={{ display: product.image ? 'none' : 'block' }}>🌾</span>
         {isSoldOut && (
           <span style={{ position: 'absolute', bottom: '0.4rem', left: '0.4rem', backgroundColor: '#c62828', color: 'white', fontSize: '0.7rem', fontWeight: 'bold', padding: '0.2rem 0.5rem', borderRadius: '4px' }}>
             {t('pc_sold_out')}
