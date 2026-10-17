@@ -269,6 +269,22 @@ export default function FarmerLoans() {
                     <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.8rem', color: '#999' }}>{loan.bankType === 'Other' ? t('bank_other') : loan.bankType}{loan.duration ? ` · ${loan.duration}` : ''}</p>
                   )}
                   <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.8rem', color: '#999' }}>{formatDate(loan.createdAt)}</p>
+                  {loan.status === 'Approved' && (
+                    <div style={{ marginTop: '0.65rem', padding: '0.75rem', backgroundColor: '#e8f5e9', border: '1px solid #a5d6a7', borderRadius: '6px', color: '#1b5e20', fontSize: '0.85rem' }}>
+                      <p style={{ margin: '0.25rem 0' }}>
+                        Principal: {formatNumber(loan.amount)} {t('unit_etb')}
+                      </p>
+                      <p style={{ margin: '0.25rem 0' }}>
+                        Interest rate: {formatNumber(loan.interestRate || 0)}%
+                      </p>
+                      <p style={{ margin: '0.25rem 0' }}>
+                        Interest amount: {formatNumber(loan.interestAmount || 0)} {t('unit_etb')}
+                      </p>
+                      <p style={{ margin: '0.35rem 0 0 0', fontWeight: 'bold' }}>
+                        Total repayment: {formatNumber(loan.totalRepayment || loan.amount)} {t('unit_etb')}
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
               <span style={{ padding: '0.35rem 0.7rem', borderRadius: '4px', backgroundColor: colors.bg, color: colors.text, fontWeight: 'bold', fontSize: '0.8rem', flexShrink: 0 }}>
