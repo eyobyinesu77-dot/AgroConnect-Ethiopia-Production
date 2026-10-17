@@ -11,6 +11,14 @@ const STATUS_COLORS = {
   Rejected: { bg: '#ffebee', text: '#c62828' },
 };
 
+const LOAN_INTEREST_RATES = Object.freeze({
+  '6 months': 12,
+  '1 year': 15,
+  '2 years': 18,
+  '3 years': 20,
+});
+
+
 export default function FarmerLoans() {
   const { t, formatNumber, formatDate } = useLanguage();
   const [loans, setLoans] = useState([]);
@@ -26,6 +34,22 @@ export default function FarmerLoans() {
   const [customReason, setCustomReason] = useState('');
   const [duration, setDuration] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const previewAmount = Number(String(amount).replace(/,/g, '').trim());
+  const previewInterestRate = LOAN_INTEREST_RATES[duration];
+  const hasValidPreview =
+    Number.isFinite(previewAmount) &&
+    previewAmount > 0 &&
+    previewInterestRate !== undefined;
+
+  const previewInterestAmount = hasValidPreview
+    ? Math.round((previewAmount * previewInterestRate / 100 + Number.EPSILON) * 100) / 100
+    : 0;
+
+  const previewTotalRepayment = hasValidPreview
+    ? Math.round((previewAmount + previewInterestAmount + Number.EPSILON) * 100) / 100
+    : 0;
+
 
   const loadLoans = async () => {
     try {
@@ -194,6 +218,18 @@ export default function FarmerLoans() {
               <option value="3 years">3 Years — 20% total interest</option>
             </select>
           </div>
+
+
+          {hasValidPreview && (
+            <div style={{ backgroundColor: '#e8f5e9', border: '1px solid #a5d6a7', borderRadius: '8px', padding: '1rem', color: '#1b5e20' }}>
+              <h4 style={{ margin: '0 0 0.75rem 0' }}>Loan Repayment Estimate</h4>
+              <p style={{ margin: '0.35rem 0' }}>Principal: {formatNumber(previewAmount)} {t('unit_etb')}</p>
+              <p style={{ margin: '0.35rem 0' }}>Total interest rate: {previewInterestRate}%</p>
+              <p style={{ margin: '0.35rem 0' }}>Interest amount: {formatNumber(previewInterestAmount)} {t('unit_etb')}</p>
+              <p style={{ margin: '0.5rem 0 0 0', fontWeight: 'bold', fontSize: '1.05rem' }}>Estimated total repayment: {formatNumber(previewTotalRepayment)} {t('unit_etb')}</p>
+              <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.8rem', color: '#555' }}>This is an estimate. Final loan terms are confirmed after approval.</p>
+            </div>
+          )}
 
           <button
             type="submit"
