@@ -8,7 +8,7 @@ const { verificationEmail, resetPasswordEmail } = require('../utils/emailTemplat
 
 const { getClientUrl } = require('../utils/clientUrl');
 const EMAIL_VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
-const RESET_PASSWORD_TTL_MS = 60 * 60 * 1000; // 1 hour
+const RESET_PASSWORD_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
 // Sends the verification email for a freshly created/updated user and
 // persists the (hashed) token + expiry on that user document. Throws if
@@ -80,7 +80,7 @@ const registerUser = async (req, res) => {
       return res.status(409).json({ message: 'This phone number is already registered.' });
     }
     if (emailExists) {
-      return res.status(409).json({ message: 'This email is already registered.' });
+      return res.status(409).json({ message: 'An account with this email already exists. Please log in instead.' });
     }
 
     const salt = await bcrypt.genSalt(10);
@@ -124,7 +124,7 @@ const registerUser = async (req, res) => {
       const field = Object.keys(error.keyPattern || error.keyValue || {})[0];
       const message = field === 'phone'
         ? 'This phone number is already registered.'
-        : 'This email is already registered.';
+        : 'An account with this email already exists. Please log in instead.';
       return res.status(409).json({ message });
     }
     res.status(500).json({ message: error.message });
@@ -193,11 +193,10 @@ const changePassword = async (req, res) => {
 // SAME 200 status and the SAME message, so neither the status nor the body
 // reveals whether an account exists.
 //
-// Honesty: 200 is returned for a registered account ONLY after Nodemailer
-// resolved (SMTP accepted the recipient). A real send failure is a 500 and is
-// logged server-side with the underlying SMTP error.
+// Honesty: 200 is returned for a registered account ONLY after Gmail SMTP
+// accepts the message. A real send failure is a 500 and is logged server-side.
 //
-// Server misconfiguration (frontend URL / SMTP settings) is checked BEFORE the
+// Server misconfiguration (frontend URL / Gmail SMTP settings) is checked BEFORE the
 // user lookup so it fails identically for every email and doesn't double as an
 // account-existence oracle.
 const GENERIC_RESET_RESPONSE = {
@@ -215,13 +214,15 @@ const forgotPassword = async (req, res) => {
     try {
       clientUrl = getClientUrl();
       if (!sendEmailOptions.isConfigured()) {
-        throw new Error('SMTP_HOST, SMTP_USER and SMTP_PASS are not all set.');
+        throw new Error('EMAIL_USER and EMAIL_PASS are not set.');
       }
     } catch (configErr) {
       console.error('❌ Password reset unavailable (server configuration):', configErr.message);
       return res.status(500).json({ message: 'The reset email could not be sent right now. Please try again later.' });
     }
 
+    // Single User collection holds admin, farmer, buyer, and extension roles.
+    // Lookup is by email only — no role filter — so every role can reset.
     const user = await User.findOne({ email });
     if (!user) {
       return res.status(200).json(GENERIC_RESET_RESPONSE);

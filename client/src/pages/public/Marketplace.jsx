@@ -106,7 +106,7 @@ export default function Marketplace() {
   const validatePurchase = (product) => {
     if (!user) {
       toast(t('mkt_signin_purchase'), { icon: '🔒' });
-      navigate('/login');
+      navigate('/login', { state: { from: location.pathname } });
       return false;
     }
     if (user.role !== 'buyer') {

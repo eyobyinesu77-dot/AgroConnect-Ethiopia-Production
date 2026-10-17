@@ -22,7 +22,7 @@ export const tOr = (t, key, raw) => {
 // raw English from the API is never shown to the user.
 const API_MESSAGE_KEYS = {
   'Incorrect email or password.': 'api_incorrect_credentials',
-  'This email is already registered.': 'api_email_registered',
+  'An account with this email already exists. Please log in instead.': 'api_email_registered',
   'This phone number is already registered.': 'api_phone_registered',
   'Phone number must start with 07 or 09 and contain exactly 10 digits (e.g. 0912345678).': 'val_phone_format',
   'Email and password are required.': 'api_email_password_required',
@@ -51,6 +51,9 @@ const API_MESSAGE_KEYS = {
   'You can only update your own products.': 'api_not_own_products',
   'You can only delete your own products.': 'api_not_own_delete',
   'expiryDate cannot be in the past.': 'api_expiry_past',
+  'Quantity must be greater than 0.': 'sellcrop_err_quantity',
+  'expiryDate is required.': 'sellcrop_err_expiry',
+  'A crop image is required.': 'sellcrop_err_image_required',
   'Valid request id and providerId are required.': 'lg_assign_invalid_ids',
   'Request not found.': 'lg_request_not_found',
   'Provider not found.': 'lg_provider_not_found',

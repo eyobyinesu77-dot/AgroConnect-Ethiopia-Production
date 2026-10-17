@@ -201,14 +201,25 @@ export default function ProductDetails() {
           )}
 
           <div className="flex gap-3 mt-3">
+            {isSoldOut ? (
+              <button
+                type="button"
+                disabled
+                className="flex-1 bg-gray-300 cursor-not-allowed text-white font-semibold py-3 rounded-lg"
+              >
+                {t('pc_sold_out')}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleAddToCart}
+                className="flex-1 bg-green-600 hover:bg-green-700 text-white font-semibold py-3 rounded-lg"
+              >
+                {t('pc_add_to_cart')}
+              </button>
+            )}
             <button
-              onClick={handleAddToCart}
-              disabled={isSoldOut}
-              className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-lg"
-            >
-              {isSoldOut ? t('pc_sold_out') : t('pc_add_to_cart')}
-            </button>
-            <button
+              type="button"
               onClick={handleToggleWishlist}
               disabled={isTogglingWishlist}
               className="px-4 py-3 border-2 border-green-600 text-green-700 rounded-lg font-semibold hover:bg-green-50 disabled:opacity-60"

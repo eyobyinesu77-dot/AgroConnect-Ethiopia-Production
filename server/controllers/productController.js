@@ -63,8 +63,23 @@ const createProduct = async (req, res) => {
   try {
     const { name, category, variety, grade, unit, price, stock, expiryDate, region, zone, woreda, kebele, description, image } = req.body;
 
-    if (!name || !category || !price || !stock || !region) {
+    if (!name || !category || price === undefined || price === null || stock === undefined || stock === null) {
       return res.status(400).json({ message: 'name, category, price, stock, and region are required.' });
+    }
+    if (Number(price) <= 0 || Number.isNaN(Number(price))) {
+      return res.status(400).json({ message: 'price must be greater than 0.' });
+    }
+    if (Number(stock) <= 0 || Number.isNaN(Number(stock))) {
+      return res.status(400).json({ message: 'Quantity must be greater than 0.' });
+    }
+    if (!expiryDate) {
+      return res.status(400).json({ message: 'Expiry date is required.' });
+    }
+    if (new Date(expiryDate) < new Date(new Date().toDateString())) {
+      return res.status(400).json({ message: 'expiryDate cannot be in the past.' });
+    }
+    if (!image || !String(image).trim()) {
+      return res.status(400).json({ message: 'A crop image is required.' });
     }
     const categoryExists = await Category.findOne({ name: category });
     if (!categoryExists) {
@@ -76,26 +91,52 @@ const createProduct = async (req, res) => {
     if (grade && !Product.GRADES.includes(grade)) {
       return res.status(400).json({ message: `grade must be one of: ${Product.GRADES.join(', ')}` });
     }
-    if (expiryDate && new Date(expiryDate) < new Date()) {
-      return res.status(400).json({ message: 'expiryDate cannot be in the past.' });
+
+    // Location authority: use the authenticated farmer's saved profile.
+    // Do not trust a conflicting region from the client (e.g. Amhara farmer
+    // submitting Oromia). Zone/woreda/kebele may come from the form only when
+    // the farmer's profile region is set and matches; otherwise profile wins.
+    const farmerRegion = req.user.region;
+    const farmerZone = req.user.zone;
+    const farmerWoreda = req.user.woreda;
+    const farmerKebele = req.user.kebele;
+
+    if (!farmerRegion) {
+      return res.status(400).json({
+        message: 'Complete your profile location (region) before listing a product.',
+      });
     }
 
+    const resolvedRegion = farmerRegion;
+    // Prefer form zone/woreda/kebele only when the submitted region matches the
+    // farmer profile (or was omitted). Otherwise force profile location.
+    const clientRegionMatches =
+      !region || String(region).trim() === String(farmerRegion).trim();
+    const resolvedZone = clientRegionMatches && zone ? zone : (farmerZone || zone);
+    const resolvedWoreda = clientRegionMatches && woreda ? woreda : (farmerWoreda || woreda);
+    const resolvedKebele = clientRegionMatches && kebele ? kebele : (farmerKebele || kebele);
+
+    if (!resolvedRegion) {
+      return res.status(400).json({ message: 'name, category, price, stock, and region are required.' });
+    }
+
+    const stockNum = Number(stock);
     const product = await Product.create({
       name,
       category,
       variety: variety || undefined,
       grade: grade || 'Grade A',
       unit: unit || 'Quintal',
-      listingStatus: Number(stock) > 0 ? 'Active' : 'Sold Out',
-      price,
-      stock,
-      expiryDate: expiryDate || undefined,
-      region,
-      zone,
-      woreda,
-      kebele,
+      listingStatus: stockNum > 0 ? 'Active' : 'Sold Out',
+      price: Number(price),
+      stock: stockNum,
+      expiryDate,
+      region: resolvedRegion,
+      zone: resolvedZone || undefined,
+      woreda: resolvedWoreda || undefined,
+      kebele: resolvedKebele || undefined,
       description,
-      image,
+      image: String(image).trim(),
       farmer: req.user._id,
     });
 
@@ -138,17 +179,49 @@ const updateProduct = async (req, res) => {
     }
 
     if (expiryDate !== undefined) {
-      // Empty string / null clears the expiry date.
-      product.expiryDate = expiryDate || undefined;
+      // Expiry date is mandatory — reject empty/null clears on update.
+      if (!expiryDate || (typeof expiryDate === 'string' && !expiryDate.trim())) {
+        return res.status(400).json({ message: 'Expiry date is required.' });
+      }
+      if (new Date(expiryDate) < new Date(new Date().toDateString())) {
+        return res.status(400).json({ message: 'expiryDate cannot be in the past.' });
+      }
+      product.expiryDate = expiryDate;
     }
 
-    if (stock !== undefined) product.stock = stock;
+    if (stock !== undefined) {
+      const stockNum = Number(stock);
+      if (Number.isNaN(stockNum) || stockNum <= 0) {
+        return res.status(400).json({ message: 'Quantity must be greater than 0.' });
+      }
+      product.stock = stockNum;
+    }
+
+    if (req.body.image !== undefined && req.body.image && String(req.body.image).trim()) {
+      product.image = String(req.body.image).trim();
+    }
+
+    // Derive listing status from stock + expiry. Expired products stay Sold Out
+    // (unavailable) even if stock is increased. Explicit listingStatus is still
+    // allowed but cannot force Active when stock is 0 or the product is expired.
+    const isExpired = product.expiryDate && new Date(product.expiryDate) < new Date(new Date().toDateString());
 
     if (listingStatus && Product.LISTING_STATUSES.includes(listingStatus)) {
+      if (listingStatus === 'Active') {
+        if (product.stock <= 0) {
+          return res.status(400).json({ message: 'Quantity must be greater than 0.' });
+        }
+        if (isExpired) {
+          return res.status(400).json({ message: 'Cannot activate an expired product. Update the expiry date first.' });
+        }
+      }
       product.listingStatus = listingStatus;
     } else if (stock !== undefined) {
-      // Keep listingStatus honest with stock unless the caller explicitly overrode it above.
-      product.listingStatus = product.stock > 0 ? 'Active' : 'Sold Out';
+      if (product.stock > 0 && !isExpired) {
+        product.listingStatus = 'Active';
+      } else {
+        product.listingStatus = 'Sold Out';
+      }
     }
 
     await product.save();

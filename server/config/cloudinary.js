@@ -1,18 +1,11 @@
-const cloudinary = require('cloudinary').v2;
-const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 
-// Real Cloudinary integration, gated behind env vars — same pattern as the
-// WEATHER_API_KEY fallback in weatherController.js. If CLOUDINARY_CLOUD_NAME,
-// CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET aren't all set, uploads fall
-// back to local disk storage instead of failing. Without this fallback,
-// multer-storage-cloudinary still "succeeds" at construction time (it never
-// validates credentials up front) but then throws Cloudinary's raw SDK error
-// ("Must supply api_key") the moment someone actually uploads a file — which
-// is exactly the confusing "API key" error surfaced to users in SellCrop and
-// the loan application form.
+// Real Cloudinary integration, gated behind env vars. If CLOUDINARY_* aren't
+// all set, uploads fall back to local disk under server/uploads.
+// Cloudinary packages are only required when credentials are present so a
+// missing/broken cloudinary install does not break local development.
 const hasCloudinaryConfig = Boolean(
   process.env.CLOUDINARY_CLOUD_NAME &&
   process.env.CLOUDINARY_API_KEY &&
@@ -38,27 +31,43 @@ const fileFilter = (req, file, cb) => {
 };
 
 let storage;
+let cloudinary = null;
 
 if (hasCloudinaryConfig) {
-  cloudinary.config({
-    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-    api_key: process.env.CLOUDINARY_API_KEY,
-    api_secret: process.env.CLOUDINARY_API_SECRET,
-  });
+  try {
+    cloudinary = require('cloudinary').v2;
+    const { CloudinaryStorage } = require('multer-storage-cloudinary');
 
-  storage = new CloudinaryStorage({
-    cloudinary,
-    params: {
-      folder: 'agroconnect',
-      allowed_formats: ['jpg', 'png', 'jpeg', 'webp', 'heic', 'pdf'],
-    },
-  });
-} else {
-  console.warn(
-    '⚠️  CLOUDINARY_CLOUD_NAME / CLOUDINARY_API_KEY / CLOUDINARY_API_SECRET are not set in server/.env — ' +
-    'image uploads will be stored locally under server/uploads instead of Cloudinary. ' +
-    'Fine for local development/demo use, but set real Cloudinary credentials before deploying.'
-  );
+    cloudinary.config({
+      cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+      api_key: process.env.CLOUDINARY_API_KEY,
+      api_secret: process.env.CLOUDINARY_API_SECRET,
+    });
+
+    storage = new CloudinaryStorage({
+      cloudinary,
+      params: {
+        folder: 'agroconnect',
+        allowed_formats: ['jpg', 'png', 'jpeg', 'webp', 'heic', 'pdf'],
+      },
+    });
+  } catch (err) {
+    console.warn(
+      '⚠️  Cloudinary packages failed to load (' + err.message + '). ' +
+      'Falling back to local disk storage under server/uploads.'
+    );
+    cloudinary = null;
+  }
+}
+
+if (!storage) {
+  if (!hasCloudinaryConfig) {
+    console.warn(
+      '⚠️  CLOUDINARY_CLOUD_NAME / CLOUDINARY_API_KEY / CLOUDINARY_API_SECRET are not set in server/.env — ' +
+      'image uploads will be stored locally under server/uploads instead of Cloudinary. ' +
+      'Fine for local development/demo use, but set real Cloudinary credentials before deploying.'
+    );
+  }
 
   const uploadsDir = path.join(__dirname, '..', 'uploads');
   if (!fs.existsSync(uploadsDir)) {
@@ -68,7 +77,6 @@ if (hasCloudinaryConfig) {
   storage = multer.diskStorage({
     destination: (req, file, cb) => cb(null, uploadsDir),
     filename: (req, file, cb) => {
-      // Use only a safe extension derived from the original name; never trust path segments
       const ext = path.extname(file.originalname || '').toLowerCase().replace(/[^a-z0-9.]/g, '') || '.bin';
       cb(null, `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`);
     },
@@ -81,4 +89,7 @@ const upload = multer({
   fileFilter,
 });
 
-module.exports = { cloudinary, upload, hasCloudinaryConfig };
+// Export whether Cloudinary is actually active (credentials + packages loaded)
+const isCloudinaryActive = Boolean(hasCloudinaryConfig && cloudinary);
+
+module.exports = { cloudinary, upload, hasCloudinaryConfig: isCloudinaryActive };

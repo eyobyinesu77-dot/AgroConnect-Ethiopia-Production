@@ -227,12 +227,8 @@ export default function Register() {
               <option value="farmer">{t('register_role_farmer')}</option>
               <option value="buyer">{t('register_role_buyer')}</option>
             </select>
-            {formData.role === 'farmer' && (
-              <div className="form-hint">
-                {t('register_farmer_hint')}
-              </div>
-            )}
           </div>
+
 
 
 

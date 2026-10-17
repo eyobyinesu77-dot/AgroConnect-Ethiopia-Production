@@ -89,7 +89,16 @@ export default function ResetPassword() {
               />
             </div>
 
-            {error && <p style={{ color: '#c62828', fontSize: '0.85rem', margin: 0 }}>{t(error)}</p>}
+            {error && (
+              <>
+                <p style={{ color: '#c62828', fontSize: '0.85rem', margin: 0 }}>{t(error)}</p>
+                <p style={{ color: '#666', fontSize: '0.85rem', margin: 0 }}>
+                  <Link to="/forgot-password" style={{ color: '#2e7d32', fontWeight: 'bold' }}>
+                    {t('reset_request_new') || 'Request a new reset email'}
+                  </Link>
+                </p>
+              </>
+            )}
 
             <button
               type="submit"

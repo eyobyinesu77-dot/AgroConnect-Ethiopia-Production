@@ -90,8 +90,12 @@ export default function MyProducts() {
       toast.error(t('myproducts_err_price'));
       return;
     }
-    if (editForm.stock === '' || Number(editForm.stock) < 0) {
-      toast.error(t('myproducts_err_quantity'));
+    if (editForm.stock === '' || Number(editForm.stock) <= 0 || Number.isNaN(Number(editForm.stock))) {
+      toast.error(t('myproducts_err_quantity') || 'Quantity must be greater than 0.');
+      return;
+    }
+    if (!editForm.expiryDate) {
+      toast.error(t('sellcrop_err_expiry') || 'Expiry date is required.');
       return;
     }
 
@@ -100,7 +104,7 @@ export default function MyProducts() {
       const updated = await productService.updateProduct(id, {
         price: Number(editForm.price),
         stock: Number(editForm.stock),
-        expiryDate: editForm.expiryDate || '',
+        expiryDate: editForm.expiryDate,
       });
       setProducts((prev) => prev.map((p) => (p._id === id ? updated : p)));
       toast.success(t('myproducts_updated_toast'));
@@ -206,7 +210,8 @@ export default function MyProducts() {
                           {editing ? (
                             <input
                               type="number"
-                              min="0"
+                              min="1"
+                              step="1"
                               value={editForm.stock}
                               onChange={(e) => setEditForm({ ...editForm, stock: e.target.value })}
                               className="w-20 border border-gray-300 rounded px-2 py-1"
@@ -221,6 +226,7 @@ export default function MyProducts() {
                               type="date"
                               value={editForm.expiryDate}
                               onChange={(e) => setEditForm({ ...editForm, expiryDate: e.target.value })}
+                              required
                               className="border border-gray-300 rounded px-2 py-1"
                             />
                           ) : item.expiryDate ? (

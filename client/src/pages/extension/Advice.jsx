@@ -124,7 +124,7 @@ export default function ExtensionAdvice() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{t('ext_advice_crop_type')} <span className="text-gray-400">{t('ext_advice_crop_optional')}</span></label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{t('ext_advice_crop_type')}</label>
             <select
               value={cropType}
               onChange={(e) => setCropType(e.target.value)}

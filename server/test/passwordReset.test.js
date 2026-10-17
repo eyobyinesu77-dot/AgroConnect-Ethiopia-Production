@@ -4,12 +4,10 @@
 // resetPassword, loginUser), utils/tokenUtils.js, utils/clientUrl.js,
 // utils/emailTemplates.js and utils/sendEmail.js.
 //
-// WHAT IS REPLACED: MongoDB (in-memory fake User model) and the SMTP socket
-// (fake Nodemailer transport) — so this proves the application LOGIC, not that
-// your MongoDB Atlas cluster or Gmail account works. For those use
-// `npm run verify:email` (real SMTP login) and a real click-through on the
-// deployed site. bcryptjs / jsonwebtoken are used for real when installed and
-// replaced by a scrypt/stub fallback only when they are not.
+// WHAT IS REPLACED: MongoDB (in-memory fake User model) and the Gmail SMTP
+// transport (fake Nodemailer). Proves application logic, not live Gmail delivery.
+// Real delivery needs EMAIL_USER / EMAIL_PASS (App Password) and a click-through.
+// bcryptjs / jsonwebtoken are used for real when installed.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const Module = require('module');
@@ -98,7 +96,7 @@ const call = async (handler, body) => {
   return res;
 };
 const withEnv = async (env, fn) => {
-  const keys = ['NODE_ENV', 'CLIENT_URL', 'FRONTEND_URL', 'SMTP_HOST', 'SMTP_USER', 'SMTP_PASS', 'SMTP_PORT', 'JWT_SECRET'];
+  const keys = ['NODE_ENV', 'CLIENT_URL', 'FRONTEND_URL', 'EMAIL_USER', 'EMAIL_PASS', 'EMAIL_FROM', 'JWT_SECRET'];
   const saved = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
   keys.forEach((k) => delete process.env[k]);
   Object.assign(process.env, env);
@@ -117,7 +115,7 @@ const PROD = { NODE_ENV: 'production', CLIENT_URL: 'https://agro.example.vercel.
 console.log(`(password hashing in this run: ${bcryptImpl})`);
 
 // ---------- tests ----------
-test('registered email: generic 200, email sent, token stored HASHED with 1h expiry, prod link', async () => {
+test('registered email: generic 200, email sent, token stored HASHED with 30m expiry, prod link', async () => {
   reset();
   await withEnv(PROD, async () => {
     const u = makeUser({ email: 'farmer@example.com', password: 'x' });
@@ -134,7 +132,7 @@ test('registered email: generic 200, email sent, token stored HASHED with 1h exp
     assert.notEqual(u.resetPasswordToken, token, 'raw token must not be stored');
     assert.equal(u.resetPasswordToken, hashToken(token), 'SHA-256 of emailed token is stored');
     const ttl = u.resetPasswordExpires.getTime() - before;
-    assert.ok(ttl > 59 * 60e3 && ttl <= 61 * 60e3, `expiry should be ~1h, got ${ttl}ms`);
+    assert.ok(ttl > 29 * 60e3 && ttl <= 31 * 60e3, `expiry should be ~30m, got ${ttl}ms`);
   });
 });
 
@@ -241,26 +239,95 @@ test('FULL FLOW: forgot -> bad/short/expired/reused tokens rejected -> reset sav
   });
 });
 
-test('sendEmail.js (real code, fake SMTP socket): placeholder / unset / rejected recipient / success', async () => {
+
+test('forgot-password works for every role (admin, farmer, buyer, extension)', async () => {
+  reset();
+  const roles = ['admin', 'farmer', 'buyer', 'extension'];
+  await withEnv({ NODE_ENV: 'development', CLIENT_URL: 'http://localhost:5173', JWT_SECRET: 'test' }, async () => {
+    for (const role of roles) {
+      mail.sent.length = 0;
+      const email = `${role}.user@example.com`;
+      makeUser({ email, role, password: 'hashed' });
+      const res = await call(forgotPassword, { email });
+      assert.equal(res.statusCode, 200, `${role} should get 200`);
+      assert.match(res.body.message, /if that email is registered/i);
+      assert.equal(mail.sent.length, 1, `${role} should trigger one email`);
+      assert.equal(mail.sent[0].email, email, `${role} email recipient must match account`);
+      // Token stored hashed on that user
+      const u = users.find((x) => x.email === email);
+      assert.ok(u.resetPasswordToken);
+      assert.ok(u.resetPasswordExpires > Date.now());
+    }
+  });
+});
+
+test('forgot-password does not filter by role when looking up user', async () => {
+  reset();
+  makeUser({ email: 'mixed@example.com', role: 'buyer', password: 'x' });
+  await withEnv({ NODE_ENV: 'development', CLIENT_URL: 'http://localhost:5173', JWT_SECRET: 'test' }, async () => {
+    const res = await call(forgotPassword, { email: 'mixed@example.com' });
+    assert.equal(res.statusCode, 200);
+    assert.equal(mail.sent.length, 1);
+    // Ensure lookup was not admin-only: buyer received mail
+    assert.equal(mail.sent[0].email, 'mixed@example.com');
+  });
+});
+
+test('sendEmail.js (real code, fake Gmail SMTP): placeholder / unset / rejected / success', async () => {
   const load = () => {
     delete require.cache[require.resolve('../utils/sendEmail')];
-    return require('../utils/sendEmail');
+    const mod = require('../utils/sendEmail');
+    if (mod._resetTransporter) mod._resetTransporter();
+    return mod;
   };
   const msg = { email: 'a@b.co', subject: 's', message: 't' };
-  const base = { SMTP_HOST: 'smtp.gmail.com', SMTP_PORT: '587', SMTP_USER: 'me@gmail.com' };
 
-  await withEnv({ ...base, SMTP_PASS: 'your_app_password' }, async () => {
-    await assert.rejects(load()(msg), /placeholder/i);
-  });
-  await withEnv({ SMTP_HOST: 'smtp.gmail.com' }, async () => {
-    await assert.rejects(load()(msg), /not configured/i);
-  });
-  await withEnv({ ...base, SMTP_PASS: 'abcdefghijklmnop' }, async () => {
-    smtp.sendMail = async () => ({ accepted: [], rejected: ['a@b.co'] });
-    await assert.rejects(load()(msg), /did not accept/i);
-    smtp.sendMail = async () => ({ accepted: ['a@b.co'], rejected: [], messageId: '<ok>' });
-    assert.equal((await load()(msg)).messageId, '<ok>');
-    smtp.sendMail = async () => { throw Object.assign(new Error('Invalid login'), { code: 'EAUTH' }); };
-    await assert.rejects(load()(msg), /Invalid login/);
-  });
+  let lastMail = null;
+  let sendImpl = async (opts) => {
+    lastMail = opts;
+    return { accepted: [opts.to], rejected: [], messageId: '<ok@gmail>' };
+  };
+
+  const Module = require('module');
+  const realLoadInner = Module._load;
+  Module._load = function (request, parent, isMain) {
+    if (request === 'nodemailer') {
+      return {
+        createTransport: () => ({
+          sendMail: async (opts) => sendImpl(opts),
+        }),
+      };
+    }
+    return realLoadInner.apply(this, arguments);
+  };
+
+  try {
+    await withEnv({ EMAIL_USER: 'me@gmail.com', EMAIL_PASS: 'your_app_password' }, async () => {
+      await assert.rejects(load()(msg), /placeholder|not configured/i);
+    });
+    await withEnv({ EMAIL_USER: 'me@gmail.com' }, async () => {
+      await assert.rejects(load()(msg), /not configured/i);
+    });
+    await withEnv({ EMAIL_USER: 'me@gmail.com', EMAIL_PASS: 'abcdefghijklmnop', EMAIL_FROM: 'AgroConnect <me@gmail.com>' }, async () => {
+      sendImpl = async (opts) => ({ accepted: [], rejected: [opts.to], messageId: null });
+      await assert.rejects(load()(msg), /did not accept/i);
+
+      sendImpl = async (opts) => {
+        lastMail = opts;
+        return { accepted: [opts.to], rejected: [], messageId: '<ok@gmail>' };
+      };
+      const info = await load()(msg);
+      assert.equal(info.messageId, '<ok@gmail>');
+      assert.equal(info.provider, 'gmail-smtp');
+      assert.equal(lastMail.to, 'a@b.co');
+      assert.equal(lastMail.subject, 's');
+
+      sendImpl = async () => {
+        throw Object.assign(new Error('Invalid login'), { code: 'EAUTH' });
+      };
+      await assert.rejects(load()(msg), /Invalid login/);
+    });
+  } finally {
+    Module._load = realLoadInner;
+  }
 });

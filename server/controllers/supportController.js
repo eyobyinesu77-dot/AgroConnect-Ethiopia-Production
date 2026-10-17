@@ -95,6 +95,7 @@ const deleteTicket = async (req, res) => {
 // POST /api/support/:id/reply — admin replies to a public support ticket
 // Reply is sent via email/SMS to the guest or user
 const replyToTicket = async (req, res) => {
+const sendEmailOptions = require('../utils/sendEmail');
   try {
     const { content } = req.body;
 
@@ -121,20 +122,11 @@ const replyToTicket = async (req, res) => {
     const contactName = ticket.guestName || ticket.user?.fullName || 'User';
 
     if (contactEmail) {
-      // Send email with reply
-      const nodemailer = require('nodemailer');
-      const transporter = nodemailer.createTransport({
-        service: 'gmail',
-        auth: {
-          user: process.env.GMAIL_USER,
-          pass: process.env.GMAIL_PASS,
-        },
-      });
-
-      const mailOptions = {
-        from: process.env.GMAIL_USER,
-        to: contactEmail,
+      // Shared Gmail SMTP helper (EMAIL_USER / EMAIL_PASS / EMAIL_FROM)
+      await sendEmailOptions({
+        email: contactEmail,
         subject: `Reply to your inquiry: ${ticket.subject}`,
+        message: `Hello ${contactName},\n\nWe have replied to your inquiry "${ticket.subject}".\n\nYour message:\n${ticket.message}\n\nOur reply:\n${ticket.adminReply.content}\n\nThank you for contacting AgroConnect Ethiopia!`,
         html: `
           <h2>Hello ${contactName},</h2>
           <p>We have replied to your inquiry:</p>
@@ -147,9 +139,7 @@ const replyToTicket = async (req, res) => {
           <hr>
           <p>Thank you for contacting AgroConnect Ethiopia!</p>
         `,
-      };
-
-      await transporter.sendMail(mailOptions);
+      });
     }
 
     res.json({

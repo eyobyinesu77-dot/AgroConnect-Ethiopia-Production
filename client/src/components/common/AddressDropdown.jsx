@@ -31,7 +31,7 @@ const fieldWrapperStyle = { flex: '1 1 160px', minWidth: '150px' };
  *     onChange={(loc) => setFormData((prev) => ({ ...prev, ...loc }))}
  *   />
  */
-export default function AddressDropdown({ value = {}, onChange }) {
+export default function AddressDropdown({ value = {}, onChange, lockRegion = false }) {
   const { t } = useLanguage();
   const { region = '', zone = '', woreda = '', kebele = '' } = value;
 
@@ -58,7 +58,15 @@ export default function AddressDropdown({ value = {}, onChange }) {
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', width: '100%' }}>
       <div style={fieldWrapperStyle}>
         <label style={{ display: 'block', marginBottom: '0.3rem', color: '#333', fontSize: '0.9rem' }}>{t('addr_region')}</label>
-        <select name="region" value={region} onChange={handleRegionChange} required style={selectStyle}>
+        <select
+          name="region"
+          value={region}
+          onChange={handleRegionChange}
+          required
+          disabled={lockRegion && Boolean(region)}
+          style={{ ...selectStyle, ...(lockRegion && region ? { backgroundColor: '#f5f5f5', cursor: 'not-allowed' } : {}) }}
+          title={lockRegion && region ? (t('addr_region_locked') || 'Region is taken from your profile') : undefined}
+        >
           <option value="">{t('addr_select_region')}</option>
           {Object.keys(regionsData).map((regKey) => (
             <option key={regKey} value={regKey}>{geoLabel(t, regionsData[regKey].name)}</option>
@@ -70,7 +78,9 @@ export default function AddressDropdown({ value = {}, onChange }) {
         <label style={{ display: 'block', marginBottom: '0.3rem', color: '#333', fontSize: '0.9rem' }}>{t('addr_zone')}</label>
         <select name="zone" value={zone} onChange={handleZoneChange} disabled={!region} required style={selectStyle}>
           <option value="">{t('addr_select_zone')}</option>
-          {Object.keys(zones).map((zoneKey) => (
+          {Object.keys(zones)
+            .sort((a, b) => (zones[a].name || a).localeCompare(zones[b].name || b))
+            .map((zoneKey) => (
             <option key={zoneKey} value={zoneKey}>{geoLabel(t, zones[zoneKey].name)}</option>
           ))}
         </select>
@@ -80,7 +90,9 @@ export default function AddressDropdown({ value = {}, onChange }) {
         <label style={{ display: 'block', marginBottom: '0.3rem', color: '#333', fontSize: '0.9rem' }}>{t('addr_woreda')}</label>
         <select name="woreda" value={woreda} onChange={handleWoredaChange} disabled={!zone} required style={selectStyle}>
           <option value="">{t('addr_select_woreda')}</option>
-          {Object.keys(woredas).map((woredaKey) => (
+          {Object.keys(woredas)
+            .sort((a, b) => (woredas[a].name || a).localeCompare(woredas[b].name || b))
+            .map((woredaKey) => (
             <option key={woredaKey} value={woredaKey}>{geoLabel(t, woredas[woredaKey].name)}</option>
           ))}
         </select>

@@ -171,7 +171,7 @@ export default function ExtensionCropConditions() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{t('ext_advice_crop_type')} <span className="text-gray-400">{t('common_optional')}</span></label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{t('ext_advice_crop_type')}</label>
             <select
               value={cropType}
               onChange={(e) => setCropType(e.target.value)}
@@ -196,7 +196,7 @@ export default function ExtensionCropConditions() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{t('ext_cond_recommendation')} <span className="text-gray-400">{t('common_optional')}</span></label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{t('ext_cond_recommendation')}</label>
             <textarea
               value={recommendation}
               onChange={(e) => setRecommendation(e.target.value)}

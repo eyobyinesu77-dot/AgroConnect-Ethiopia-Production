@@ -57,13 +57,21 @@ const createOrder = async (req, res) => {
         await rollbackStock(decrementedItems);
         return res.status(404).json({ message: `Product not found: ${item.product}` });
       }
+      if (product.listingStatus === 'Sold Out' || Number(product.stock) < 1) {
+        await rollbackStock(decrementedItems);
+        return res.status(400).json({
+          message: `Not enough stock for "${product.name}". Only ${product.stock ?? 0} available.`,
+        });
+      }
+      if (product.expiryDate && new Date(product.expiryDate) < new Date(new Date().toDateString())) {
+        await rollbackStock(decrementedItems);
+        return res.status(400).json({
+          message: `"${product.name}" is no longer available (expired).`,
+        });
+      }
 
-      // Atomic check-and-decrement in one operation: the update only
-      // matches (and only applies) if stock is currently >= the requested
-      // quantity. This closes the race window a separate "check stock"
-      // then "decrement stock" pair would leave open — two concurrent
-      // checkouts for the last few units can no longer both pass their
-      // own check before either decrement lands.
+      // Atomic check-and-decrement: update only matches if stock >= quantity.
+      // If remaining stock is 0, mark Sold Out in a follow-up update.
       const updated = await Product.findOneAndUpdate(
         { _id: item.product, stock: { $gte: quantity } },
         { $inc: { stock: -quantity } },
@@ -71,8 +79,6 @@ const createOrder = async (req, res) => {
       );
       if (!updated) {
         await rollbackStock(decrementedItems);
-        // Re-fetch current stock for an accurate message (product.stock
-        // above may be stale if another request changed it concurrently).
         const current = await Product.findById(item.product).select('stock');
         return res.status(400).json({ message: `Not enough stock for "${product.name}". Only ${current?.stock ?? 0} available.` });
       }
@@ -80,8 +86,8 @@ const createOrder = async (req, res) => {
       decrementedItems.push({ product: item.product, quantity });
 
       if (updated.stock <= 0 && updated.listingStatus !== 'Sold Out') {
+        await Product.findByIdAndUpdate(item.product, { $set: { listingStatus: 'Sold Out' } });
         updated.listingStatus = 'Sold Out';
-        await updated.save();
       }
 
       preparedItems.push({
@@ -244,6 +250,35 @@ const updateOrderStatus = async (req, res) => {
       return res.status(400).json({
         message: 'Please verify the Telebirr payment screenshot before confirming this order.',
       });
+    }
+
+    const previousStatus = order.status;
+
+    // Restore inventory when an order is cancelled (only if it was not
+    // already Cancelled — prevents double restore on repeated requests).
+    if (status === 'Cancelled' && previousStatus !== 'Cancelled') {
+      for (const item of order.orderItems) {
+        const productId = item.product?._id || item.product;
+        const qty = Number(item.quantity) || 0;
+        if (!productId || qty <= 0) continue;
+        try {
+          const restored = await Product.findByIdAndUpdate(
+            productId,
+            {
+              $inc: { stock: qty },
+              $set: { listingStatus: 'Active' },
+            },
+            { new: true }
+          );
+          // If the product is expired, keep it unavailable despite stock restore.
+          if (restored && restored.expiryDate && new Date(restored.expiryDate) < new Date(new Date().toDateString())) {
+            restored.listingStatus = 'Sold Out';
+            await restored.save();
+          }
+        } catch (restoreErr) {
+          console.error('Failed to restore stock for product', productId, ':', restoreErr.message);
+        }
+      }
     }
 
     order.status = status;

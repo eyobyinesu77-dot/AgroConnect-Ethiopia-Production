@@ -55,7 +55,16 @@ export default function ProfileForm({ extraFields = [] }) {
 
       const updated = await userService.updateProfile(payload);
       setProfile(updated);
-      updateUser({ name: updated.fullName });
+      updateUser({
+        fullName: updated.fullName,
+        name: updated.fullName,
+        phone: updated.phone,
+        region: updated.region,
+        zone: updated.zone,
+        woreda: updated.woreda,
+        kebele: updated.kebele,
+        fayidaId: updated.fayidaId,
+      });
       toast.success(t('profile_updated'));
     } catch (error) {
       toast.error(t(apiErrorKey(error, 'profile_update_error', 'profile_update_error')));

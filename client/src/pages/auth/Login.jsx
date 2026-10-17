@@ -26,10 +26,12 @@ export default function Login() {
 
   const validateField = (name, value) => {
     let error = '';
+    const trimmed = typeof value === 'string' ? value.trim() : value;
     
     switch(name) {
       case 'email':
-        if (!value) error = 'auth_err_email_required';
+        if (!trimmed) error = 'auth_err_email_required';
+        else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) error = 'auth_err_email_invalid';
         break;
         
       case 'password':
@@ -90,18 +92,18 @@ export default function Login() {
       const userData = {
         id: data._id,
         email: data.email,
+        // Store both fullName (DB field) and name (legacy UI alias) so
+        // dashboards and profile forms read the authenticated farmer's
+        // real name after login and page refresh.
+        fullName: data.fullName,
         name: data.fullName,
         role: data.role,
         region: data.region,
         zone: data.zone,
         woreda: data.woreda,
         kebele: data.kebele,
-        // fayidaId was previously dropped here, so isFarmerProfileComplete()
-        // always saw a farmer as incomplete after login — even when the
-        // profile (and Fayida ID) had already been saved to the database —
-        // sending them back into the Complete Profile form on every
-        // subsequent login and inviting a duplicate-key resubmission of the
-        // same ID. Carry it through like every other profile field.
+        // fayidaId must be carried through — otherwise profile-completion
+        // checks fail on every login even when the ID is already saved.
         fayidaId: data.fayidaId,
         mustChangePassword: !!data.mustChangePassword,
       };

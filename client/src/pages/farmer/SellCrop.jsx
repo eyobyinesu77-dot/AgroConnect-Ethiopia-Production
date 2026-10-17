@@ -7,6 +7,7 @@ import { productService } from '../../services/productService';
 import { uploadService } from '../../services/uploadService';
 import { categoryService } from '../../services/categoryService';
 import { useLanguage } from '../../context/LanguageContext';
+import { useAuth } from '../../context/AuthContext';
 import { apiErrorKey, dataLabel } from '../../utils/i18nKeys';
 
 const INITIAL_FORM_STATE = {
@@ -46,9 +47,18 @@ const MAX_IMAGE_SIZE_MB = 5;
 
 export default function SellCrop() {
   const { t } = useLanguage();
+  const { user } = useAuth();
   const cameraInputRef = useRef(null);
   const galleryInputRef = useRef(null);
-  const [formData, setFormData] = useState(INITIAL_FORM_STATE);
+  // Prefill location from the authenticated farmer's saved profile so the
+  // product is not listed under a different region by accident.
+  const [formData, setFormData] = useState(() => ({
+    ...INITIAL_FORM_STATE,
+    region: user?.region || '',
+    zone: user?.zone || '',
+    woreda: user?.woreda || '',
+    kebele: user?.kebele || '',
+  }));
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -148,11 +158,19 @@ export default function SellCrop() {
       return;
     }
     if (!isPositiveNumber(formData.quantity)) {
-      toast.error(t('sellcrop_err_quantity'));
+      toast.error(t('sellcrop_err_quantity') || 'Quantity must be greater than 0.');
       return;
     }
     if (!isPositiveNumber(formData.price)) {
       toast.error(t('sellcrop_err_price'));
+      return;
+    }
+    if (!formData.expiryDate) {
+      toast.error(t('sellcrop_err_expiry') || 'Expiry date is required.');
+      return;
+    }
+    if (!imageFile) {
+      toast.error(t('sellcrop_err_image_required') || 'A crop image is required.');
       return;
     }
     if (!formData.region || !formData.zone || !formData.woreda) {
@@ -182,13 +200,14 @@ export default function SellCrop() {
         unit: formData.unit,
         price: Number(formData.price),
         stock: Number(formData.quantity),
-        expiryDate: formData.expiryDate || undefined,
+        expiryDate: formData.expiryDate,
         description: formData.description || undefined,
         image: imageUrl,
-        region: formData.region,
-        zone: formData.zone,
-        woreda: formData.woreda,
-        kebele: formData.kebele || undefined,
+        // Prefer authenticated farmer profile region (backend also enforces this).
+        region: user?.region || formData.region,
+        zone: formData.zone || user?.zone,
+        woreda: formData.woreda || user?.woreda,
+        kebele: formData.kebele || user?.kebele || undefined,
       });
 
       toast.success(t('sellcrop_listed_toast'));
@@ -264,7 +283,7 @@ export default function SellCrop() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block mb-1 text-sm text-gray-700">
-              {t('sellcrop_variety_label')} <span className="text-gray-400">({t('sellcrop_optional')})</span>
+              {t('sellcrop_variety_label')}
             </label>
             <select
               name="variety"
@@ -316,13 +335,13 @@ export default function SellCrop() {
             <input
               type="number"
               name="quantity"
+              min="1"
+              step="1"
               value={formData.quantity}
               onChange={handleChange}
               onKeyDown={blockInvalidNumberKeys}
               onWheel={(e) => e.currentTarget.blur()}
               required
-              min="1"
-              step="1"
               inputMode="numeric"
               className="w-full px-3 py-2.5 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500"
             />
@@ -363,13 +382,14 @@ export default function SellCrop() {
         {/* Expiry Date */}
         <div>
           <label className="block mb-1 text-sm text-gray-700">
-            {t('sellcrop_expiry_label')} <span className="text-gray-400">({t('sellcrop_optional')})</span>
+            {t('sellcrop_expiry_label')} <span className="text-red-600">*</span>
           </label>
           <input
             type="date"
             name="expiryDate"
             value={formData.expiryDate}
             onChange={handleChange}
+            required
             min={new Date().toISOString().split('T')[0]}
             className="w-full sm:w-1/2 px-3 py-2.5 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500"
           />
@@ -378,7 +398,7 @@ export default function SellCrop() {
         {/* Description */}
         <div>
           <label className="block mb-1 text-sm text-gray-700">
-            {t('sellcrop_description_label')} <span className="text-gray-400">({t('sellcrop_optional')})</span>
+            {t('sellcrop_description_label')}
           </label>
           <textarea
             name="description"
@@ -393,7 +413,7 @@ export default function SellCrop() {
         {/* Product Image */}
         <div>
           <label className="block mb-1 text-sm text-gray-700">
-            {t('sellcrop_image_label')} <span className="text-gray-400">({t('sellcrop_optional')}, {t('common_max')} {MAX_IMAGE_SIZE_MB}{t('unit_mb')})</span>
+            {t('sellcrop_image_label')} <span className="text-red-600">*</span> <span className="text-gray-400">({t('common_max')} {MAX_IMAGE_SIZE_MB}{t('unit_mb')})</span>
           </label>
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
             {imagePreview && (
@@ -453,7 +473,23 @@ export default function SellCrop() {
         {/* Cascading address dropdown */}
         <AddressDropdowns
           value={{ region: formData.region, zone: formData.zone, woreda: formData.woreda, kebele: formData.kebele }}
-          onChange={(loc) => setFormData((prev) => ({ ...prev, ...loc }))}
+          lockRegion={Boolean(user?.region)}
+          onChange={(loc) => {
+            setFormData((prev) => {
+              // Never allow changing away from the farmer's saved region.
+              const region = user?.region || loc.region || prev.region;
+              if (user?.region && loc.region && loc.region !== user.region) {
+                return prev;
+              }
+              return {
+                ...prev,
+                region,
+                zone: loc.zone !== undefined ? loc.zone : prev.zone,
+                woreda: loc.woreda !== undefined ? loc.woreda : prev.woreda,
+                kebele: loc.kebele !== undefined ? loc.kebele : prev.kebele,
+              };
+            });
+          }}
         />
 
         <button

@@ -1,18 +1,37 @@
 import React from 'react';
 import { useLanguage } from '../../context/LanguageContext';
-import { dataLabel, geoJoin } from '../../utils/i18nKeys';
+import { dataLabel, geoJoin, geoLabel } from '../../utils/i18nKeys';
+import { regionsData } from '../../utils/constants';
 
 // Receives the REAL product document (with _id, stock, populated farmer,
-// etc.) directly — not a pre-flattened display-only copy. This card reads
-// farmer/location off the real shape itself so nothing needs to strip
-// fields before handing the product to Cart/Wishlist/Buy Now handlers.
+// etc.) directly — not a pre-flattened display-only copy.
 export default function ProductCard({ product, onAddToCart, onBuyNow, onWishlist, onViewDetails, isWishlisted }) {
   const { t, formatNumber } = useLanguage();
-  const isSoldOut = product.listingStatus === 'Sold Out' || (product.stock ?? 1) < 1;
+  const isSoldOut = product.listingStatus === 'Sold Out' || Number(product.stock) < 1;
   const farmerName = product.farmer?.fullName || product.farmerName || t('common_unknown_farmer');
-  const location = product.region
-    ? geoJoin(t, [product.region, product.zone], ', ')
+  // Region/zone may be stored as cascade keys (e.g. "amhara") or display names.
+  const regionDisplay = (() => {
+    const r = product.region;
+    if (!r) return '';
+    if (regionsData[r]?.name) return regionsData[r].name;
+    return r;
+  })();
+  const zoneDisplay = (() => {
+    const r = product.region;
+    const z = product.zone;
+    if (!z) return '';
+    if (r && regionsData[r]?.zones?.[z]?.name) return regionsData[r].zones[z].name;
+    // Search all regions for zone key
+    for (const reg of Object.values(regionsData)) {
+      if (reg.zones?.[z]?.name) return reg.zones[z].name;
+    }
+    return z;
+  })();
+  const location = regionDisplay
+    ? geoJoin(t, [regionDisplay, zoneDisplay].filter(Boolean), ', ')
     : (product.location || '');
+  const unitLabel = dataLabel(t, 'unit', product.unit || 'Quintal');
+  const stockValue = Number(product.stock);
 
   return (
     <div
@@ -27,13 +46,14 @@ export default function ProductCard({ product, onAddToCart, onBuyNow, onWishlist
         width: '250px',
         flexShrink: 0,
         position: 'relative',
-        opacity: isSoldOut ? 0.6 : 1,
+        opacity: isSoldOut ? 0.75 : 1,
       }}
     >
       {onWishlist && (
         <button
+          type="button"
           onClick={() => onWishlist(product)}
-          style={{ position: 'absolute', top: '0.6rem', right: '0.6rem', background: 'none', border: 'none', fontSize: '1.3rem', cursor: 'pointer', lineHeight: 1 }}
+          style={{ position: 'absolute', top: '0.6rem', right: '0.6rem', background: 'none', border: 'none', fontSize: '1.3rem', cursor: 'pointer', lineHeight: 1, zIndex: 2 }}
           title={isWishlisted ? t('pc_remove_wishlist') : t('pc_add_wishlist')}
         >
           {isWishlisted ? '❤️' : '🤍'}
@@ -51,12 +71,13 @@ export default function ProductCard({ product, onAddToCart, onBuyNow, onWishlist
               objectPosition: 'center',
             }}
             onError={(e) => {
-              // Fallback to emoji if image fails to load
               e.target.style.display = 'none';
+              const fallback = e.target.parentElement?.querySelector('[data-fallback]');
+              if (fallback) fallback.style.display = 'block';
             }}
           />
         ) : null}
-        <span style={{ display: product.image ? 'none' : 'block' }}>🌾</span>
+        <span data-fallback style={{ display: product.image ? 'none' : 'block' }}>🌾</span>
         {isSoldOut && (
           <span style={{ position: 'absolute', bottom: '0.4rem', left: '0.4rem', backgroundColor: '#c62828', color: 'white', fontSize: '0.7rem', fontWeight: 'bold', padding: '0.2rem 0.5rem', borderRadius: '4px' }}>
             {t('pc_sold_out')}
@@ -65,6 +86,7 @@ export default function ProductCard({ product, onAddToCart, onBuyNow, onWishlist
       </div>
       {onViewDetails && (
         <button
+          type="button"
           onClick={() => onViewDetails(product)}
           style={{ background: 'none', border: 'none', padding: 0, color: '#2e7d32', fontSize: '0.78rem', fontWeight: 'bold', cursor: 'pointer', textAlign: 'left', alignSelf: 'flex-start' }}
         >
@@ -74,6 +96,7 @@ export default function ProductCard({ product, onAddToCart, onBuyNow, onWishlist
       <h4 style={{ margin: '0.5rem 0 0 0', color: '#1b5e20' }}>
         {onViewDetails ? (
           <button
+            type="button"
             onClick={() => onViewDetails(product)}
             style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', color: '#1b5e20', cursor: 'pointer', textAlign: 'left' }}
           >
@@ -90,51 +113,75 @@ export default function ProductCard({ product, onAddToCart, onBuyNow, onWishlist
         </span>
       )}
       <p style={{ margin: 0, fontSize: '0.9rem', color: '#666' }}>
-        {t('pc_price_label').split(':')[0]}: <strong>{formatNumber(product.price)} {t('unit_etb')} / {dataLabel(t, 'unit', product.unit || 'Quintal')}</strong>
+        <strong>{formatNumber(product.price)} {t('unit_etb')} / {unitLabel}</strong>
       </p>
+      {!isSoldOut && Number.isFinite(stockValue) && (
+        <p style={{ margin: 0, fontSize: '0.85rem', color: '#555' }}>
+          {t('pd_stock_available')
+            .replace('{stock}', formatNumber(stockValue))
+            .replace('{unit}', unitLabel)}
+        </p>
+      )}
       <p style={{ margin: 0, fontSize: '0.85rem', color: '#777' }}>{t('pc_farmer_label').split(':')[0]}: {farmerName}</p>
       <p style={{ margin: 0, fontSize: '0.85rem', color: '#777' }}>{t('pc_location_label').split(':')[0]}: {location}</p>
 
-      {/* Three independent actions, always visible — no hover requirement,
-          no responsive hiding. Add to Cart stays on the page; Buy Now
-          reuses the same addItem() call then immediately routes to the
-          existing checkout flow; Wishlist (heart, above) is fully
-          independent of both. */}
       <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.5rem' }}>
-        <button
-          onClick={() => onAddToCart(product)}
-          disabled={isSoldOut}
-          style={{
-            flex: 1,
-            backgroundColor: isSoldOut ? '#bbb' : '#2e7d32',
-            color: 'white',
-            border: 'none',
-            padding: '0.6rem 0.4rem',
-            borderRadius: '4px',
-            fontWeight: 'bold',
-            fontSize: '0.82rem',
-            cursor: isSoldOut ? 'not-allowed' : 'pointer',
-          }}
-        >
-          {isSoldOut ? t('pc_sold_out') : t('pc_add_to_cart')}
-        </button>
-        <button
-          onClick={() => onBuyNow(product)}
-          disabled={isSoldOut}
-          style={{
-            flex: 1,
-            backgroundColor: isSoldOut ? '#ddd' : 'white',
-            color: isSoldOut ? '#999' : '#2e7d32',
-            border: `2px solid ${isSoldOut ? '#ccc' : '#2e7d32'}`,
-            padding: '0.6rem 0.4rem',
-            borderRadius: '4px',
-            fontWeight: 'bold',
-            fontSize: '0.82rem',
-            cursor: isSoldOut ? 'not-allowed' : 'pointer',
-          }}
-        >
-          {t('pc_buy_now')}
-        </button>
+        {isSoldOut ? (
+          <button
+            type="button"
+            disabled
+            style={{
+              flex: 1,
+              backgroundColor: '#bbb',
+              color: 'white',
+              border: 'none',
+              padding: '0.6rem 0.4rem',
+              borderRadius: '4px',
+              fontWeight: 'bold',
+              fontSize: '0.82rem',
+              cursor: 'not-allowed',
+            }}
+          >
+            {t('pc_sold_out')}
+          </button>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={() => onAddToCart && onAddToCart(product)}
+              style={{
+                flex: 1,
+                backgroundColor: '#2e7d32',
+                color: 'white',
+                border: 'none',
+                padding: '0.6rem 0.4rem',
+                borderRadius: '4px',
+                fontWeight: 'bold',
+                fontSize: '0.82rem',
+                cursor: 'pointer',
+              }}
+            >
+              {t('pc_add_to_cart')}
+            </button>
+            <button
+              type="button"
+              onClick={() => onBuyNow && onBuyNow(product)}
+              style={{
+                flex: 1,
+                backgroundColor: 'white',
+                color: '#2e7d32',
+                border: '2px solid #2e7d32',
+                padding: '0.6rem 0.4rem',
+                borderRadius: '4px',
+                fontWeight: 'bold',
+                fontSize: '0.82rem',
+                cursor: 'pointer',
+              }}
+            >
+              {t('pc_buy_now')}
+            </button>
+          </>
+        )}
       </div>
     </div>
   );

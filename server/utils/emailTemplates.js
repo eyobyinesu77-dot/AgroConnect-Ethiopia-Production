@@ -23,12 +23,12 @@ const verificationEmail = (verifyUrl) => ({
 
 const resetPasswordEmail = (resetUrl) => ({
   subject: 'Reset your AgroConnect Ethiopia password',
-  message: `We received a request to reset your password. Open this link to choose a new password: ${resetUrl} (expires in 1 hour). If you did not request this, ignore this email — your password will not change.`,
+  message: `We received a request to reset your password. Open this link to choose a new password: ${resetUrl} (expires in 30 minutes). If you did not request this, ignore this email — your password will not change.`,
   html: wrap(
     '🔑 Reset your password',
     `<p style="color:#333;">We received a request to reset your AgroConnect Ethiopia password.</p>
      <p><a href="${resetUrl}" style="background:#2e7d32;color:#fff;padding:0.75rem 1.5rem;border-radius:4px;text-decoration:none;font-weight:bold;display:inline-block;">Reset Password</a></p>
-     <p style="color:#666;font-size:0.85rem;">This link expires in 1 hour. If you did not request this, you can safely ignore this email — your password will not change.</p>`
+     <p style="color:#666;font-size:0.85rem;">This link expires in 30 minutes. If you did not request this, you can safely ignore this email — your password will not change.</p>`
   ),
 });
 

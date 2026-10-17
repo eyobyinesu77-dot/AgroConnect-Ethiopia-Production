@@ -34,10 +34,6 @@ export default function ForgotPassword() {
           </p>
         ) : (
           <>
-            <p style={{ color: '#666', fontSize: '0.9rem', textAlign: 'center', marginBottom: '1.5rem' }}>
-              {t('forgot_prompt')}
-            </p>
-
             <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
               <div>
                 <label style={{ display: 'block', marginBottom: '0.4rem', color: '#333', fontSize: '0.9rem' }}>{t('auth_email_plain')}</label>
