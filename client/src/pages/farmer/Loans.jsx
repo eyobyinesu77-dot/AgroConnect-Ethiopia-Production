@@ -181,13 +181,18 @@ export default function FarmerLoans() {
 
           <div>
             <label style={{ display: 'block', marginBottom: '0.3rem', fontSize: '0.9rem' }}>{t('loans_duration_label')}</label>
-            <input
-              type="text"
+            <select
               value={duration}
               onChange={(e) => setDuration(e.target.value)}
-              placeholder={t('loans_duration_placeholder')}
-              style={{ width: '100%', padding: '0.6rem', borderRadius: '4px', border: '1px solid #ccc', boxSizing: 'border-box' }}
-            />
+              required
+              style={{ width: '100%', padding: '0.6rem', borderRadius: '4px', border: '1px solid #ccc', boxSizing: 'border-box', backgroundColor: 'white' }}
+            >
+              <option value="">Select loan duration</option>
+              <option value="6 months">6 Months — 12% total interest</option>
+              <option value="1 year">1 Year — 15% total interest</option>
+              <option value="2 years">2 Years — 18% total interest</option>
+              <option value="3 years">3 Years — 20% total interest</option>
+            </select>
           </div>
 
           <button
