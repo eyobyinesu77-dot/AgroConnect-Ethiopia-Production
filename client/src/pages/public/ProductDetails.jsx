@@ -78,7 +78,18 @@ export default function ProductDetails() {
       toast.error(t('mkt_out_of_stock'));
       return;
     }
-    addItem(product, quantity);
+    const requestedQuantity = Number(quantity);
+
+    if (
+      !Number.isInteger(requestedQuantity) ||
+      requestedQuantity < 1 ||
+      requestedQuantity > product.stock
+    ) {
+      toast.error('Enter a quantity between 1 and the available stock.');
+      return;
+    }
+
+    addItem(product, requestedQuantity);
     toast.success(t('mkt_added_to_cart').replace('{name}', product.name));
   };
 
@@ -191,10 +202,20 @@ export default function ProductDetails() {
               <label className="text-sm text-gray-600">{t('pd_quantity')}</label>
               <input
                 type="number"
+                inputMode="numeric"
                 min="1"
                 max={product.stock}
+                step="1"
                 value={quantity}
-                onChange={(e) => setQuantity(Math.max(1, Math.min(product.stock, Number(e.target.value) || 1)))}
+                onChange={(e) => setQuantity(e.target.value)}
+                onBlur={() => {
+                  const entered = Number(quantity);
+                  if (!Number.isInteger(entered) || entered < 1) {
+                    setQuantity(1);
+                  } else {
+                    setQuantity(Math.min(entered, product.stock));
+                  }
+                }}
                 className="w-20 px-2 py-1.5 border border-gray-300 rounded-lg"
               />
             </div>
