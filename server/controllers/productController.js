@@ -15,7 +15,13 @@ const getProducts = async (req, res) => {
     if (req.query.listingStatus) filter.listingStatus = req.query.listingStatus;
 
     if (req.query.includeExpired !== 'true') {
-      filter.$or = [{ expiryDate: null }, { expiryDate: { $gte: new Date() } }];
+      const today = new Date();
+      today.setUTCHours(0, 0, 0, 0);
+
+      filter.$or = [
+        { expiryDate: null },
+        { expiryDate: { $gte: today } },
+      ];
     }
 
     const products = await Product.find(filter)
