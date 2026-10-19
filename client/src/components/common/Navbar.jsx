@@ -36,7 +36,7 @@ export default function Navbar({ onMenuClick, dashboardPath }) {
 
   if (isPublicPage || !user) {
     return (
-      <nav className="sticky top-0 z-30 w-full bg-[#f9fafb]/95 backdrop-blur-sm border-b border-green-100 shadow-sm">
+      <nav className="sticky top-0 z-30 w-full bg-[#F3F7F5]/95 backdrop-blur-sm border-b border-[#087F5B]/20 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 md:px-8">
           <div className="flex items-center justify-between h-16">
             {/* Logo — far left */}
@@ -46,7 +46,7 @@ export default function Navbar({ onMenuClick, dashboardPath }) {
               onClick={() => setIsMenuOpen(false)}
             >
               <LogoImage size={36} />
-              <span className="text-lg font-bold text-[#166534] whitespace-nowrap">AgroConnect</span>
+              <span className="text-lg font-bold text-[#087F5B] whitespace-nowrap">AgroConnect</span>
             </Link>
 
             {/* Nav links — centered row, large screens only */}
@@ -57,8 +57,8 @@ export default function Navbar({ onMenuClick, dashboardPath }) {
                   to={item.path}
                   className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
                     isActive(item.path)
-                      ? 'text-[#166534] bg-green-100'
-                      : 'text-gray-600 hover:text-[#166534] hover:bg-green-50'
+                      ? 'text-[#087F5B] bg-[#087F5B]/10'
+                      : 'text-gray-600 hover:text-[#087F5B] hover:bg-[#087F5B]/10'
                   }`}
                 >
                   {t(item.labelKey)}
@@ -72,15 +72,15 @@ export default function Navbar({ onMenuClick, dashboardPath }) {
                 to="/login"
                 className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
                   isActive('/login')
-                    ? 'text-[#166534] bg-green-100'
-                    : 'text-gray-600 hover:text-[#166534] hover:bg-green-50'
+                    ? 'text-[#087F5B] bg-[#087F5B]/10'
+                    : 'text-gray-600 hover:text-[#087F5B] hover:bg-[#087F5B]/10'
                 }`}
               >
                 {t('pubnav_login')}
               </Link>
               <Link
                 to="/register"
-                className="px-4 py-2 rounded-md text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 shadow-sm transition-colors"
+                className="px-4 py-2 rounded-md text-sm font-semibold text-white bg-[#087F5B] hover:bg-[#066647] shadow-sm transition-colors"
               >
                 {t('pubnav_register')}
               </Link>
@@ -91,7 +91,7 @@ export default function Navbar({ onMenuClick, dashboardPath }) {
               onClick={() => setIsMenuOpen((open) => !open)}
               aria-label={isMenuOpen ? t('a11y_close_menu') : t('a11y_open_menu')}
               aria-expanded={isMenuOpen}
-              className="lg:hidden p-2 rounded-md text-[#166534] hover:bg-green-50 transition-colors"
+              className="lg:hidden p-2 rounded-md text-[#087F5B] hover:bg-[#087F5B]/10 transition-colors"
             >
               {isMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
             </button>
@@ -100,7 +100,7 @@ export default function Navbar({ onMenuClick, dashboardPath }) {
 
         {/* Mobile & tablet dropdown menu */}
         {isMenuOpen && (
-          <div className="lg:hidden border-t border-green-100 bg-[#f9fafb] px-4 pb-4 pt-2">
+          <div className="lg:hidden border-t border-[#087F5B]/20 bg-[#F3F7F5] px-4 pb-4 pt-2">
             <div className="flex flex-col gap-1">
               {navLinks.map((item) => (
                 <Link
@@ -109,21 +109,21 @@ export default function Navbar({ onMenuClick, dashboardPath }) {
                   onClick={() => setIsMenuOpen(false)}
                   className={`px-3 py-2.5 rounded-md text-sm font-medium transition-colors ${
                     isActive(item.path)
-                      ? 'text-[#166534] bg-green-100'
-                      : 'text-gray-600 hover:text-[#166534] hover:bg-green-50'
+                      ? 'text-[#087F5B] bg-[#087F5B]/10'
+                      : 'text-gray-600 hover:text-[#087F5B] hover:bg-[#087F5B]/10'
                   }`}
                 >
                   {t(item.labelKey)}
                 </Link>
               ))}
-              <div className="flex flex-col gap-2 mt-2 pt-3 border-t border-green-100">
+              <div className="flex flex-col gap-2 mt-2 pt-3 border-t border-[#087F5B]/20">
                 <Link
                   to="/login"
                   onClick={() => setIsMenuOpen(false)}
                   className={`px-3 py-2.5 rounded-md text-sm font-medium text-center transition-colors ${
                     isActive('/login')
-                      ? 'text-[#166534] bg-green-100'
-                      : 'text-gray-600 hover:text-[#166534] hover:bg-green-50'
+                      ? 'text-[#087F5B] bg-[#087F5B]/10'
+                      : 'text-gray-600 hover:text-[#087F5B] hover:bg-[#087F5B]/10'
                   }`}
                 >
                   {t('pubnav_login')}
@@ -131,7 +131,7 @@ export default function Navbar({ onMenuClick, dashboardPath }) {
                 <Link
                   to="/register"
                   onClick={() => setIsMenuOpen(false)}
-                  className="px-4 py-2.5 rounded-md text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 text-center shadow-sm transition-colors"
+                  className="px-4 py-2.5 rounded-md text-sm font-semibold text-white bg-[#087F5B] hover:bg-[#066647] text-center shadow-sm transition-colors"
                 >
                   {t('pubnav_register')}
                 </Link>

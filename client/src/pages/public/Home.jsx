@@ -99,12 +99,12 @@ export default function Home() {
   }, []);
 
   return (
-    <div className="w-full min-h-screen bg-[#f8faf8] flex flex-col">
+    <div className="w-full min-h-screen bg-[#F3F7F5] flex flex-col">
       {/* Hero Section */}
       <section
         className="relative w-full flex items-center justify-center min-h-[480px] sm:min-h-[540px] md:min-h-[600px] py-16 md:py-24 px-4 md:px-8 text-center overflow-hidden bg-cover bg-center bg-no-repeat bg-[url('/images/hero-marketplace.png')]"
       >
-        <div className="absolute inset-0 bg-gradient-to-br from-black/75 via-black/60 to-emerald-900/50" />
+        <div className="absolute inset-0 bg-gradient-to-br from-[#0B1420]/85 via-[#0B1420]/65 to-[#087F5B]/60" />
         <div className="relative z-10 max-w-4xl mx-auto">
           <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-[3.25rem] font-extrabold mb-5 text-white drop-shadow-lg leading-tight tracking-tight">
             {t('home_hero_title')}
@@ -115,14 +115,14 @@ export default function Home() {
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
             <Link
               to="/marketplace"
-              className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-base px-7 py-3 rounded-lg shadow-lg transition-colors"
+              className="inline-flex items-center gap-2 bg-[#087F5B] hover:bg-[#066647] text-white font-semibold text-base px-7 py-3 rounded-lg shadow-lg transition-colors"
             >
               {t('home_cta_marketplace') || 'Explore Marketplace'}
               <ArrowRight className="w-4 h-4" />
             </Link>
             <Link
               to="/register"
-              className="inline-flex items-center gap-2 bg-white/95 hover:bg-white text-emerald-800 font-semibold text-base px-7 py-3 rounded-lg shadow-lg transition-colors"
+              className="inline-flex items-center gap-2 bg-white/95 hover:bg-white text-[#0B1420] font-semibold text-base px-7 py-3 rounded-lg shadow-lg transition-colors"
             >
               {t('home_get_started') || 'Join AgroConnect'}
             </Link>
@@ -133,9 +133,9 @@ export default function Home() {
 
 
       {/* Features */}
-      <section className="bg-white border-y border-green-100">
+      <section className="bg-white border-y border-[#087F5B]/20">
         <div className="max-w-7xl mx-auto py-14 md:py-20 px-4 md:px-8">
-          <h2 className="text-2xl md:text-3xl font-bold text-center mb-3 text-[#166534]">
+          <h2 className="text-2xl md:text-3xl font-bold text-center mb-3 text-[#0B1420]">
             {t('home_features_title')}
           </h2>
           <p className="text-center text-gray-600 mb-12 max-w-2xl mx-auto">
@@ -146,12 +146,12 @@ export default function Home() {
             {features.map(({ icon: Icon, titleKey, descriptionKey }) => (
               <div
                 key={titleKey}
-                className="p-6 border border-green-100 rounded-xl bg-[#f8faf8] hover:shadow-md hover:border-green-200 transition-all"
+                className="p-6 border border-[#087F5B]/20 rounded-xl bg-[#F3F7F5] hover:shadow-md hover:border-[#087F5B]/40 transition-all"
               >
-                <div className="w-12 h-12 mb-4 rounded-full bg-emerald-100 flex items-center justify-center">
-                  <Icon className="w-6 h-6 text-emerald-700" />
+                <div className="w-12 h-12 mb-4 rounded-full bg-[#087F5B]/10 flex items-center justify-center">
+                  <Icon className="w-6 h-6 text-[#087F5B]" />
                 </div>
-                <h3 className="font-bold text-base mb-1.5 text-[#166534]">{t(titleKey)}</h3>
+                <h3 className="font-bold text-base mb-1.5 text-[#0B1420]">{t(titleKey)}</h3>
                 <p className="text-gray-600 text-sm leading-relaxed">{t(descriptionKey)}</p>
               </div>
             ))}
@@ -161,7 +161,7 @@ export default function Home() {
 
       {/* How It Works */}
       <section className="max-w-7xl mx-auto w-full py-14 md:py-20 px-4 md:px-8">
-        <h2 className="text-2xl md:text-3xl font-bold text-center mb-3 text-[#166534]">
+        <h2 className="text-2xl md:text-3xl font-bold text-center mb-3 text-[#0B1420]">
           {t('home_how_title') || 'How It Works'}
         </h2>
         <p className="text-center text-gray-600 mb-12 max-w-2xl mx-auto">
@@ -175,9 +175,9 @@ export default function Home() {
                 {num}
               </div>
               <div className="flex justify-center mb-2">
-                <Icon className="w-5 h-5 text-emerald-700" />
+                <Icon className="w-5 h-5 text-[#087F5B]" />
               </div>
-              <h3 className="font-bold text-lg mb-2 text-[#166534]">{t(titleKey)}</h3>
+              <h3 className="font-bold text-lg mb-2 text-[#0B1420]">{t(titleKey)}</h3>
               <p className="text-gray-600 text-sm leading-relaxed">{t(descriptionKey)}</p>
             </div>
           ))}
@@ -186,7 +186,7 @@ export default function Home() {
         <div className="text-center mt-12">
           <Link
             to="/register"
-            className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-8 py-3 rounded-lg shadow transition-colors"
+            className="inline-flex items-center gap-2 bg-[#087F5B] hover:bg-[#066647] text-white font-semibold px-8 py-3 rounded-lg shadow transition-colors"
           >
             {t('home_get_started') || 'Join AgroConnect'}
             <ArrowRight className="w-4 h-4" />

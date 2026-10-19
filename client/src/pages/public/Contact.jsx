@@ -56,19 +56,19 @@ export default function Contact() {
   };
 
   const inputClass =
-    'w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-transparent';
+    'w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#087F5B] focus:border-transparent';
 
   return (
-    <div className="bg-green-50 min-h-[85vh]">
+    <div className="bg-[#F3F7F5] min-h-[85vh]">
       <div className="max-w-xl mx-auto px-6 py-16">
-        <h1 className="text-3xl md:text-4xl font-extrabold text-gray-800 mb-3 text-center">
+        <h1 className="text-3xl md:text-4xl font-extrabold text-[#0B1420] mb-3 text-center">
           {t('contact_title') || 'Contact Us'}
         </h1>
         <p className="text-gray-600 mb-8 text-center">
           {t('contact_intro') || 'Send us a message and we will get back to you.'}
         </p>
 
-        <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow-sm border border-green-100 p-6 md:p-8 space-y-4">
+        <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow-sm border border-[#087F5B]/20 p-6 md:p-8 space-y-4">
           {!user && (
             <div>
               <label htmlFor="contact-email" className="block text-sm font-medium text-gray-700 mb-1">
@@ -120,7 +120,7 @@ export default function Contact() {
           <button
             type="submit"
             disabled={isSubmitting}
-            className="w-full inline-flex items-center justify-center gap-2 bg-green-700 hover:bg-green-800 disabled:opacity-60 text-white font-semibold py-2.5 rounded-lg transition-colors"
+            className="w-full inline-flex items-center justify-center gap-2 bg-[#087F5B] hover:bg-[#066647] disabled:opacity-60 text-white font-semibold py-2.5 rounded-lg transition-colors"
           >
             {isSubmitting ? (t('contact_sending') || 'Sending...') : <>{t('contact_send') || 'Send Message'} <Send className="h-4 w-4" /></>}
           </button>

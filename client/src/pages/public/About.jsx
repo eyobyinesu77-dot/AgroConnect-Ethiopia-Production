@@ -23,24 +23,24 @@ const pillars = [
 export default function About() {
   const { t } = useLanguage();
   return (
-    <div className="bg-green-50 min-h-[85vh]">
+    <div className="bg-[#F3F7F5] min-h-[85vh]">
       <div className="max-w-4xl mx-auto px-6 py-16">
-        <div className="inline-flex items-center gap-2 bg-white shadow-sm border border-green-100 rounded-full px-4 py-1.5 text-sm text-green-700 font-medium mb-6">
+        <div className="inline-flex items-center gap-2 bg-white shadow-sm border border-[#087F5B]/20 rounded-full px-4 py-1.5 text-sm text-[#087F5B] font-medium mb-6">
           <Sprout className="h-4 w-4" />
           {t('about_badge')}
         </div>
-        <h1 className="text-3xl md:text-4xl font-extrabold text-gray-800 mb-6">{t('about_title')}</h1>
+        <h1 className="text-3xl md:text-4xl font-extrabold text-[#0B1420] mb-6">{t('about_title')}</h1>
         <p className="text-gray-600 leading-relaxed text-lg mb-12">
-          <b className="text-green-800">{t('about_brand_name')}</b>{t('about_body')}
+          <b className="text-[#087F5B]">{t('about_brand_name')}</b>{t('about_body')}
         </p>
 
         <div className="grid sm:grid-cols-3 gap-6">
           {pillars.map(({ icon: Icon, titleKey, textKey }) => (
-            <div key={titleKey} className="bg-white rounded-2xl p-6 shadow-sm border border-green-100">
-              <div className="h-11 w-11 rounded-xl bg-green-100 text-green-700 flex items-center justify-center mb-4">
+            <div key={titleKey} className="bg-white rounded-2xl p-6 shadow-sm border border-[#087F5B]/20">
+              <div className="h-11 w-11 rounded-xl bg-[#087F5B]/10 text-[#087F5B] flex items-center justify-center mb-4">
                 <Icon className="h-5 w-5" />
               </div>
-              <h3 className="font-semibold text-gray-800 mb-2">{t(titleKey)}</h3>
+              <h3 className="font-semibold text-[#0B1420] mb-2">{t(titleKey)}</h3>
               <p className="text-sm text-gray-600 leading-relaxed">{t(textKey)}</p>
             </div>
           ))}
