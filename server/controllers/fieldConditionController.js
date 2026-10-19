@@ -1,6 +1,7 @@
 const FieldCondition = require('../models/FieldCondition');
 const User = require('../models/User');
 const { notifyUser } = require('../utils/notify');
+const { getUploadedFileUrl } = require('../utils/fileUrl');
 
 // POST /api/field-conditions — extension worker reports a condition for a specific farmer
 const createFieldCondition = async (req, res) => {
@@ -25,6 +26,7 @@ const createFieldCondition = async (req, res) => {
       cropType: cropType || undefined,
       description,
       recommendation: recommendation || undefined,
+      imageUrl: getUploadedFileUrl(req),
     });
 
     notifyUser(farmerId, `🌾 New ${conditionType.toLowerCase()} report from your extension worker.`);
@@ -56,6 +58,8 @@ const updateFieldCondition = async (req, res) => {
     if (cropType !== undefined) condition.cropType = cropType || undefined;
     if (description) condition.description = description;
     if (recommendation !== undefined) condition.recommendation = recommendation || undefined;
+    const uploadedImageUrl = getUploadedFileUrl(req);
+    if (uploadedImageUrl) condition.imageUrl = uploadedImageUrl;
 
     await condition.save();
     notifyUser(condition.farmer, `🌾 Your extension worker updated a ${condition.conditionType.toLowerCase()} report.`);

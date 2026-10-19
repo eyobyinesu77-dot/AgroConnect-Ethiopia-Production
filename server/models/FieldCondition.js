@@ -18,6 +18,7 @@ const fieldConditionSchema = new mongoose.Schema({
   cropType: { type: String }, // optional — e.g. "Teff", "Maize"
   description: { type: String, required: true },
   recommendation: { type: String },
+  imageUrl: { type: String },
 }, { timestamps: true });
 
 fieldConditionSchema.index({ farmer: 1 });

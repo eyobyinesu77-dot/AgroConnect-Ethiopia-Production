@@ -32,6 +32,7 @@ export default function FarmerCropConditions() {
             <div key={c._id} className="bg-white rounded-xl shadow-sm border border-green-200 p-4">
               <p className="font-bold text-gray-900">{tOr(t, { 'Crop Condition': 'cond_type_crop', 'Disease/Pest': 'cond_type_disease', 'Field Condition': 'cond_type_field' }[c.conditionType], c.conditionType)}{c.cropType ? ` · ${dataLabel(t, 'crop', c.cropType)}` : ''}</p>
               <p className="text-sm text-gray-700 mt-1">{c.description}</p>
+              {c.imageUrl && <img src={c.imageUrl} alt="Crop or field condition" loading="lazy" className="mt-3 max-h-64 rounded-lg border object-contain" />}
               {c.recommendation && <p className="text-sm text-[#166534] mt-1">💡 {c.recommendation}</p>}
               <p className="text-xs text-gray-500 mt-2">
                 {c.extensionWorker?.fullName ? `${t('conditions_from')} ${c.extensionWorker.fullName} · ` : ''}

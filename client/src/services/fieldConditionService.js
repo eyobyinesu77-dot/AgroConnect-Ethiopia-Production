@@ -1,12 +1,26 @@
-import API from './api';
+import API, { uploadAPI } from './api';
+
+const toFormData = (data) => {
+  const form = new FormData();
+  Object.entries(data).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) form.append(key, value);
+  });
+  return form;
+};
 
 export const fieldConditionService = {
-  createCondition: async ({ farmerId, conditionType, cropType, description, recommendation }) => {
-    const response = await API.post('/field-conditions', { farmerId, conditionType, cropType, description, recommendation });
+  createCondition: async ({ farmerId, conditionType, cropType, description, recommendation, image }) => {
+    const response = await uploadAPI.post(
+      '/field-conditions',
+      toFormData({ farmerId, conditionType, cropType, description, recommendation, image })
+    );
     return response.data;
   },
-  updateCondition: async (id, { conditionType, cropType, description, recommendation }) => {
-    const response = await API.patch(`/field-conditions/${id}`, { conditionType, cropType, description, recommendation });
+  updateCondition: async (id, { conditionType, cropType, description, recommendation, image }) => {
+    const response = await uploadAPI.patch(
+      `/field-conditions/${id}`,
+      toFormData({ conditionType, cropType, description, recommendation, image })
+    );
     return response.data;
   },
   deleteCondition: async (id) => {

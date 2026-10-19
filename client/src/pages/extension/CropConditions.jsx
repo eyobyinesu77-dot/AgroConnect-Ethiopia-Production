@@ -30,6 +30,8 @@ export default function ExtensionCropConditions() {
   const [cropType, setCropType] = useState('');
   const [description, setDescription] = useState('');
   const [recommendation, setRecommendation] = useState('');
+  const [imageFile, setImageFile] = useState(null);
+  const [imagePreview, setImagePreview] = useState('');
 
   const load = async () => {
     try {
@@ -54,6 +56,8 @@ export default function ExtensionCropConditions() {
     setCropType('');
     setDescription('');
     setRecommendation('');
+    setImageFile(null);
+    setImagePreview('');
     setEditingId(null);
   };
 
@@ -64,7 +68,33 @@ export default function ExtensionCropConditions() {
     setCropType(c.cropType || '');
     setDescription(c.description);
     setRecommendation(c.recommendation || '');
+    setImageFile(null);
+    setImagePreview(c.imageUrl || '');
     setShowForm(true);
+  };
+
+  const handleConditionPhotoChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const allowedTypes = [
+      'image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif',
+    ];
+
+    if (!allowedTypes.includes(file.type)) {
+      toast.error('Choose a JPG, PNG, WebP, or HEIC image.');
+      e.target.value = '';
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image must be 5 MB or smaller.');
+      e.target.value = '';
+      return;
+    }
+
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
   };
 
   const handleSubmit = async (e) => {
@@ -90,6 +120,7 @@ export default function ExtensionCropConditions() {
           cropType: cropType || undefined,
           description: description.trim(),
           recommendation: recommendation.trim() || undefined,
+          image: imageFile || undefined,
         });
         toast.success(t('ext_cond_updated'));
       } else {
@@ -99,6 +130,7 @@ export default function ExtensionCropConditions() {
           cropType: cropType || undefined,
           description: description.trim(),
           recommendation: recommendation.trim() || undefined,
+          image: imageFile || undefined,
         });
         toast.success(t('ext_cond_saved'));
       }
@@ -206,6 +238,49 @@ export default function ExtensionCropConditions() {
             />
           </div>
 
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Crop / Field Photo (optional)
+            </label>
+            <div className="flex flex-wrap gap-3">
+              <label className="cursor-pointer rounded-lg bg-green-600 px-4 py-3 text-sm font-semibold text-white">
+                📷 Take Photo
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                  onChange={handleConditionPhotoChange}
+                />
+              </label>
+              <label className="cursor-pointer rounded-lg border border-green-600 px-4 py-3 text-sm font-semibold text-green-700">
+                🖼️ Choose from Gallery
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleConditionPhotoChange}
+                />
+              </label>
+            </div>
+            {imagePreview && (
+              <div className="mt-3">
+                <img
+                  src={imagePreview}
+                  alt="Crop or field preview"
+                  className="max-h-64 rounded-lg border object-contain"
+                />
+                <button
+                  type="button"
+                  onClick={() => { setImageFile(null); setImagePreview(''); }}
+                  className="mt-2 text-sm text-red-600 underline"
+                >
+                  Remove selected photo
+                </button>
+              </div>
+            )}
+          </div>
+
           <button
             type="submit"
             disabled={isSubmitting}
@@ -228,6 +303,7 @@ export default function ExtensionCropConditions() {
               <div>
                 <p className="font-bold text-gray-900">{CONDITION_LABEL_KEYS[c.conditionType] ? t(CONDITION_LABEL_KEYS[c.conditionType]) : c.conditionType}{c.cropType ? ` · ${c.cropType}` : ''}</p>
                 <p className="text-sm text-gray-700 mt-1">{c.description}</p>
+                {c.imageUrl && <img src={c.imageUrl} alt="Crop or field condition" loading="lazy" className="mt-3 max-h-64 rounded-lg border object-contain" />}
                 {c.recommendation && <p className="text-sm text-[#166534] mt-1">💡 {c.recommendation}</p>}
                 <p className="text-xs text-gray-500 mt-2">
                   {t('ext_cond_for').replace('{name}', c.farmer?.fullName || t('buyer_unknown_farmer'))} · {formatDate(c.createdAt)}
