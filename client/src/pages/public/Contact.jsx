@@ -12,6 +12,7 @@ export default function Contact() {
   const [msg, setMsg] = useState({
     guestEmail: '',
     subject: '',
+    otherSubject: '',
     message: '',
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -29,7 +30,11 @@ export default function Contact() {
       return;
     }
     if (!msg.subject.trim()) {
-      toast.error(t('contact_err_subject') || 'Please enter a subject.');
+      toast.error(t('contact_err_subject') || 'Please select a subject.');
+      return;
+    }
+    if (msg.subject === 'Other inquiry' && !msg.otherSubject.trim()) {
+      toast.error('Please write your subject.');
       return;
     }
     if (!msg.message.trim()) {
@@ -40,14 +45,14 @@ export default function Contact() {
     setIsSubmitting(true);
     try {
       await supportService.createTicket({
-        subject: msg.subject.trim(),
+        subject: msg.subject === 'Other inquiry' ? msg.otherSubject.trim() : msg.subject.trim(),
         category: msg.subject,
         language: 'English',
         message: msg.message.trim(),
         guestEmail: user ? undefined : email,
       });
       toast.success(t('contact_sent') || 'Your message has been sent.');
-      setMsg({ guestEmail: '', subject: '', message: '' });
+      setMsg({ guestEmail: '', subject: '', otherSubject: '', message: '' });
     } catch (error) {
       toast.error(t(apiErrorKey(error, 'contact_err_send', 'contact_err_send')));
     } finally {
@@ -108,6 +113,24 @@ export default function Contact() {
               <option value="Other inquiry">Other inquiry</option>
             </select>
           </div>
+
+          {msg.subject === 'Other inquiry' && (
+            <div>
+              <label htmlFor="contact-other-subject" className="block text-sm font-medium text-gray-700 mb-1">
+                Write other subject <span className="text-red-600">*</span>
+              </label>
+              <input
+                id="contact-other-subject"
+                type="text"
+                placeholder="Write your subject"
+                value={msg.otherSubject}
+                onChange={(e) => setMsg({ ...msg, otherSubject: e.target.value })}
+                required
+                className={inputClass}
+                maxLength={120}
+              />
+            </div>
+          )}
 
           <div>
             <label htmlFor="contact-message" className="block text-sm font-medium text-gray-700 mb-1">
