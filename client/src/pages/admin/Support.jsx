@@ -189,7 +189,16 @@ export default function AdminSupport() {
                   </button>
                 </div>
               </div>
-              <p style={{ margin: 0, fontSize: '0.9rem', color: '#555', whiteSpace: 'pre-wrap' }}>{ticket.message}</p>
+              <button
+                type="button"
+                onClick={() => {
+                  if (ticket.status === 'New') handleStatusChange(ticket._id, 'Read');
+                }}
+                title={ticket.status === 'New' ? 'Click to mark as read' : 'Support message'}
+                style={{ display: 'block', width: '100%', margin: 0, padding: 0, border: 'none', background: 'transparent', textAlign: 'left', font: 'inherit', color: '#555', fontSize: '0.9rem', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', cursor: 'pointer' }}
+              >
+                {ticket.message}
+              </button>
 
               {ticket.adminReply?.content && (
                 <div style={{ marginTop: '1rem', padding: '0.75rem', background: '#e8f5e9', borderRadius: '6px' }}>
@@ -200,9 +209,7 @@ export default function AdminSupport() {
               )}
 
               <div style={{ marginTop: '1rem', borderTop: '1px solid #eee', paddingTop: '1rem' }}>
-                <label htmlFor={'reply-' + ticket._id} style={{ display: 'block', fontWeight: 600, marginBottom: '0.5rem' }}>
-                  Reply to sender by email
-                </label>
+
                 <textarea
                   id={'reply-' + ticket._id}
                   rows={3}
