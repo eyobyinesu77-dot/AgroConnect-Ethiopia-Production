@@ -17,6 +17,10 @@ export const supportService = {
     const response = await API.patch(`/support/${id}/status`, { status });
     return response.data;
   },
+  replyToTicket: async (id, content) => {
+    const response = await API.post('/support/' + id + '/reply', { content });
+    return response.data;
+  },
   deleteTicket: async (id) => {
     const response = await API.delete(`/support/${id}`);
     return response.data;

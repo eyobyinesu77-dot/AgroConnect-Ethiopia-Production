@@ -8,7 +8,11 @@ const supportSchema = new mongoose.Schema({
   subject: { type: String, required: true, trim: true },
   category: {
     type: String,
-    enum: ['Technical Issue', 'Payment Issue', 'General Inquiry'],
+    enum: [
+      'Payment problem', 'Registration problem', 'Login problem',
+      'Product upload problem', 'Other inquiry',
+      'Technical Issue', 'Payment Issue', 'General Inquiry',
+    ],
     required: true,
   },
   language: {

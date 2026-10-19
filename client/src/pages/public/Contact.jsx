@@ -41,7 +41,7 @@ export default function Contact() {
     try {
       await supportService.createTicket({
         subject: msg.subject.trim(),
-        category: 'General Inquiry',
+        category: msg.subject,
         language: 'English',
         message: msg.message.trim(),
         guestEmail: user ? undefined : email,

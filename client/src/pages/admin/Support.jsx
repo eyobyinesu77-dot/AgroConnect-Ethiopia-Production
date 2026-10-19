@@ -26,6 +26,8 @@ export default function AdminSupport() {
   const [isLoading, setIsLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
+  const [replyDrafts, setReplyDrafts] = useState({});
+  const [replyingId, setReplyingId] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
 
@@ -66,6 +68,35 @@ export default function AdminSupport() {
       toast.error(t(apiErrorKey(error, 'admin_support_delete_error', 'admin_support_delete_error')));
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  const handleReply = async (ticket) => {
+    const content = (replyDrafts[ticket._id] || '').trim();
+    if (!content) {
+      toast.error('Please write a reply first.');
+      return;
+    }
+
+    setReplyingId(ticket._id);
+    try {
+      const result = await supportService.replyToTicket(ticket._id, content);
+      setTickets((prev) => prev.map((item) =>
+        item._id === ticket._id
+          ? { ...item, ...result.ticket, user: item.user }
+          : item
+      ));
+      setReplyDrafts((prev) => ({ ...prev, [ticket._id]: '' }));
+
+      if (result.emailSent === false) {
+        toast.error(result.message || 'Reply saved, but email was not sent.');
+      } else {
+        toast.success(result.message || 'Reply sent.');
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Could not save reply.');
+    } finally {
+      setReplyingId(null);
     }
   };
 
@@ -158,7 +189,37 @@ export default function AdminSupport() {
                   </button>
                 </div>
               </div>
-              <p style={{ margin: 0, fontSize: '0.9rem', color: '#555' }}>{ticket.message}</p>
+              <p style={{ margin: 0, fontSize: '0.9rem', color: '#555', whiteSpace: 'pre-wrap' }}>{ticket.message}</p>
+
+              {ticket.adminReply?.content && (
+                <div style={{ marginTop: '1rem', padding: '0.75rem', background: '#e8f5e9', borderRadius: '6px' }}>
+                  <strong>Admin reply</strong>
+                  <p style={{ margin: '0.4rem 0', whiteSpace: 'pre-wrap' }}>{ticket.adminReply.content}</p>
+                  {ticket.adminReply.repliedAt && <small>{formatDate(ticket.adminReply.repliedAt)}</small>}
+                </div>
+              )}
+
+              <div style={{ marginTop: '1rem', borderTop: '1px solid #eee', paddingTop: '1rem' }}>
+                <label htmlFor={'reply-' + ticket._id} style={{ display: 'block', fontWeight: 600, marginBottom: '0.5rem' }}>
+                  Reply to sender by email
+                </label>
+                <textarea
+                  id={'reply-' + ticket._id}
+                  rows={3}
+                  value={replyDrafts[ticket._id] ?? ''}
+                  onChange={(e) => setReplyDrafts((prev) => ({ ...prev, [ticket._id]: e.target.value }))}
+                  placeholder="Write your response..."
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '0.75rem', border: '1px solid #ccc', borderRadius: '6px', resize: 'vertical' }}
+                />
+                <button
+                  type="button"
+                  onClick={() => handleReply(ticket)}
+                  disabled={replyingId === ticket._id}
+                  style={{ marginTop: '0.5rem', padding: '0.55rem 1rem', background: '#087F5B', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
+                >
+                  {replyingId === ticket._id ? 'Sending...' : 'Send Reply'}
+                </button>
+              </div>
             </div>
           );
         })

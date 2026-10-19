@@ -12,7 +12,11 @@ const createTicket = async (req, res) => {
     if (!subject?.trim() || !category || !message?.trim()) {
       return res.status(400).json({ message: 'subject, category, and message are required.' });
     }
-    if (!['Technical Issue', 'Payment Issue', 'General Inquiry'].includes(category)) {
+    if (![
+      'Payment problem', 'Registration problem', 'Login problem',
+      'Product upload problem', 'Other inquiry',
+      'Technical Issue', 'Payment Issue', 'General Inquiry',
+    ].includes(category)) {
       return res.status(400).json({ message: 'Invalid support category.' });
     }
     if (!req.user && !guestEmail?.trim()) {
@@ -95,20 +99,22 @@ const deleteTicket = async (req, res) => {
 // POST /api/support/:id/reply — admin replies to a public support ticket
 // Reply is sent via email/SMS to the guest or user
 const replyToTicket = async (req, res) => {
-const sendEmailOptions = require('../utils/sendEmail');
+  const sendEmailOptions = require('../utils/sendEmail');
+
   try {
     const { content } = req.body;
 
-    if (!content?.trim()) {
+    if (typeof content !== 'string' || !content.trim()) {
       return res.status(400).json({ message: 'Reply content is required.' });
     }
 
-    const ticket = await Support.findById(req.params.id);
+    const ticket = await Support.findById(req.params.id)
+      .populate('user', 'fullName email');
+
     if (!ticket) {
       return res.status(404).json({ message: 'Ticket not found.' });
     }
 
-    // Update ticket with admin reply
     ticket.adminReply = {
       content: content.trim(),
       repliedBy: req.user._id,
@@ -117,38 +123,67 @@ const sendEmailOptions = require('../utils/sendEmail');
     ticket.status = 'Replied';
     await ticket.save();
 
-    // Send email to guest or registered user
     const contactEmail = ticket.guestEmail || ticket.user?.email;
     const contactName = ticket.guestName || ticket.user?.fullName || 'User';
 
-    if (contactEmail) {
-      // Shared Gmail SMTP helper (EMAIL_USER / EMAIL_PASS / EMAIL_FROM)
-      await sendEmailOptions({
-        email: contactEmail,
-        subject: `Reply to your inquiry: ${ticket.subject}`,
-        message: `Hello ${contactName},\n\nWe have replied to your inquiry "${ticket.subject}".\n\nYour message:\n${ticket.message}\n\nOur reply:\n${ticket.adminReply.content}\n\nThank you for contacting AgroConnect Ethiopia!`,
-        html: `
-          <h2>Hello ${contactName},</h2>
-          <p>We have replied to your inquiry:</p>
-          <h3>${ticket.subject}</h3>
-          <p><strong>Your Message:</strong></p>
-          <p>${ticket.message}</p>
-          <hr>
-          <p><strong>Our Reply:</strong></p>
-          <p>${ticket.adminReply.content}</p>
-          <hr>
-          <p>Thank you for contacting AgroConnect Ethiopia!</p>
-        `,
+    if (!contactEmail) {
+      return res.json({
+        message: 'Reply saved, but this ticket has no contact email.',
+        emailSent: false,
+        ticket,
       });
     }
 
-    res.json({
-      message: 'Reply sent to user via email.',
+    const escapeHtml = (value) => String(value || '').replace(/[&<>"']/g, (char) => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;',
+    }[char]));
+
+    const safeName = escapeHtml(contactName);
+    const safeSubject = escapeHtml(ticket.subject);
+    const safeMessage = escapeHtml(ticket.message);
+    const safeReply = escapeHtml(ticket.adminReply.content);
+
+    try {
+      await sendEmailOptions({
+        email: contactEmail,
+        subject: 'Reply to your inquiry: ' + ticket.subject,
+        message:
+          'Hello ' + contactName + ',\n\n' +
+          'We have replied to your inquiry "' + ticket.subject + '".\n\n' +
+          'Your message:\n' + ticket.message + '\n\n' +
+          'Our reply:\n' + ticket.adminReply.content + '\n\n' +
+          'Thank you for contacting AgroConnect Ethiopia!',
+        html:
+          '<h2>Hello ' + safeName + ',</h2>' +
+          '<p>We have replied to your inquiry:</p>' +
+          '<h3>' + safeSubject + '</h3>' +
+          '<p><strong>Your message:</strong></p>' +
+          '<p>' + safeMessage.replace(/\n/g, '<br>') + '</p><hr>' +
+          '<p><strong>Our reply:</strong></p>' +
+          '<p>' + safeReply.replace(/\n/g, '<br>') + '</p><hr>' +
+          '<p>Thank you for contacting AgroConnect Ethiopia!</p>',
+      });
+    } catch (emailError) {
+      console.error('Support reply email error:', emailError.message);
+      return res.json({
+        message: 'Reply saved, but email failed. Check Resend configuration.',
+        emailSent: false,
+        ticket,
+      });
+    }
+
+    return res.json({
+      message: 'Reply saved and email sent successfully.',
+      emailSent: true,
       ticket,
     });
   } catch (error) {
     console.error('Support reply error:', error.message);
-    res.status(500).json({ message: error.message });
+    return res.status(500).json({ message: 'Could not process the support reply.' });
   }
 };
 
