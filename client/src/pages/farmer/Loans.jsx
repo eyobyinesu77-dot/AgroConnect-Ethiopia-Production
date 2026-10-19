@@ -99,8 +99,8 @@ export default function FarmerLoans() {
       return;
     }
     const parsedAmount = Number(String(amount).replace(/,/g, '').trim());
-    if (!amount || Number.isNaN(parsedAmount) || parsedAmount <= 0) {
-      toast.error(t('loans_err_amount'));
+    if (!amount || !Number.isFinite(parsedAmount) || parsedAmount < 1000 || parsedAmount > 100000) {
+      toast.error('Loan amount must be between 1,000 and 100,000 ETB.');
       return;
     }
     if (!reason) {
@@ -176,6 +176,8 @@ export default function FarmerLoans() {
               inputMode="numeric"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
+              placeholder="1,000 - 100,000 ETB"
+              aria-label="Loan amount (minimum 1,000 ETB, maximum 100,000 ETB)"
               style={{ width: '100%', padding: '0.6rem', borderRadius: '4px', border: '1px solid #ccc', boxSizing: 'border-box' }}
             />
           </div>

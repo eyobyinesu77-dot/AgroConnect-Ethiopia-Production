@@ -16,7 +16,8 @@ const applyLoan = async (req, res) => {
     if (
       amount === undefined ||
       !Number.isFinite(numericAmount) ||
-      numericAmount <= 0 ||
+      numericAmount < 1000 ||
+      numericAmount > 100000 ||
       !reason ||
       !bankType ||
       !duration

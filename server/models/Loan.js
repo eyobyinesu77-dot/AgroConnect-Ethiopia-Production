@@ -11,7 +11,8 @@ const loanSchema = new mongoose.Schema(
     amount: {
       type: Number,
       required: true,
-      min: 1,
+      min: [1000, 'Minimum loan amount is 1,000 ETB.'],
+      max: [100000, 'Maximum loan amount is 100,000 ETB.'],
     },
 
     reason: {
