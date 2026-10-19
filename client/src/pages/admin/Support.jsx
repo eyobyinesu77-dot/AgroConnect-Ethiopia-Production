@@ -27,6 +27,7 @@ export default function AdminSupport() {
   const [updatingId, setUpdatingId] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
   const [replyDrafts, setReplyDrafts] = useState({});
+  const [expandedReplyId, setExpandedReplyId] = useState(null);
   const [replyingId, setReplyingId] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
@@ -192,6 +193,7 @@ export default function AdminSupport() {
               <button
                 type="button"
                 onClick={() => {
+                  setExpandedReplyId((current) => current === ticket._id ? null : ticket._id);
                   if (ticket.status === 'New') handleStatusChange(ticket._id, 'Read');
                 }}
                 title={ticket.status === 'New' ? 'Click to mark as read' : 'Support message'}
@@ -208,6 +210,7 @@ export default function AdminSupport() {
                 </div>
               )}
 
+              {expandedReplyId === ticket._id && (
               <div style={{ marginTop: '1rem', borderTop: '1px solid #eee', paddingTop: '1rem' }}>
 
                 <textarea
@@ -227,6 +230,7 @@ export default function AdminSupport() {
                   {replyingId === ticket._id ? 'Sending...' : 'Send Reply'}
                 </button>
               </div>
+              )}
             </div>
           );
         })
