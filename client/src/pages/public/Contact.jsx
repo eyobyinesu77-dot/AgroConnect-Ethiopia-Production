@@ -91,15 +91,22 @@ export default function Contact() {
             <label htmlFor="contact-subject" className="block text-sm font-medium text-gray-700 mb-1">
               {t('contact_subject_placeholder') || 'Subject'} <span className="text-red-600">*</span>
             </label>
-            <input
+            <select
               id="contact-subject"
-              type="text"
-              placeholder={t('contact_subject_placeholder') || 'Subject'}
               value={msg.subject}
               onChange={(e) => setMsg({ ...msg, subject: e.target.value })}
               required
               className={inputClass}
-            />
+            >
+              <option value="" disabled>
+                Select a subject
+              </option>
+              <option value="Payment problem">Payment problem</option>
+              <option value="Registration problem">Registration problem</option>
+              <option value="Login problem">Login problem</option>
+              <option value="Product upload problem">Product upload problem</option>
+              <option value="Other inquiry">Other inquiry</option>
+            </select>
           </div>
 
           <div>
