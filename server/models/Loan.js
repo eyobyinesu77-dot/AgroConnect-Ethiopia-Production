@@ -32,8 +32,14 @@ const loanSchema = new mongoose.Schema(
       default: "",
       trim: true,
       validate: {
-        validator: value => !value || /^\d+$/.test(value),
-        message: "Bank account number must contain digits only.",
+        validator: function(value) {
+          if (!value) return true;
+          if (this.bankType === "Commercial Bank of Ethiopia (CBE)") {
+            return /^\d{13}$/.test(value);
+          }
+          return /^\d{10,16}$/.test(value);
+        },
+        message: "CBE accounts must contain 13 digits; other bank accounts must contain 10 to 16 digits.",
       },
     },
 

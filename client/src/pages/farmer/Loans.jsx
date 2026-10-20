@@ -100,8 +100,16 @@ export default function FarmerLoans() {
       toast.error(t('loans_err_bank_custom'));
       return;
     }
-    if (accountNumber.trim().length === 0 || Array.from(accountNumber.trim()).some(ch => ch < "0" || ch > "9")) {
-      toast.error('Enter a valid bank account number using digits only.');
+    const trimmedAccountNumber = accountNumber.trim();
+    const isCbe = bankType === 'Commercial Bank of Ethiopia (CBE)';
+    const validAccountNumber = isCbe
+      ? /^\d{13}$/.test(trimmedAccountNumber)
+      : /^\d{10,16}$/.test(trimmedAccountNumber);
+
+    if (!validAccountNumber) {
+      toast.error(isCbe
+        ? 'CBE account number must contain exactly 13 digits.'
+        : 'Bank account number must contain 10 to 16 digits.');
       return;
     }
     const parsedAmount = Number(String(amount).replace(/,/g, '').trim());

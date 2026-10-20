@@ -12,6 +12,10 @@ const applyLoan = async (req, res) => {
   try {
     const { amount, reason, bankType, duration, accountNumber } = req.body;
     const normalizedAccountNumber = typeof accountNumber === "string" ? accountNumber.trim() : "";
+    const isCbe = bankType === "Commercial Bank of Ethiopia (CBE)";
+    const validAccountNumber = isCbe
+      ? /^\d{13}$/.test(normalizedAccountNumber)
+      : /^\d{10,16}$/.test(normalizedAccountNumber);
     const numericAmount = Number(amount);
 
     if (
@@ -21,7 +25,7 @@ const applyLoan = async (req, res) => {
       numericAmount > 100000 ||
       !reason ||
       !bankType ||
-      !/^\d+$/.test(normalizedAccountNumber) ||
+      !validAccountNumber ||
       !duration
     ) {
       return res.status(400).json({
