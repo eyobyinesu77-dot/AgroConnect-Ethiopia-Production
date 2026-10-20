@@ -160,6 +160,12 @@ export default function AdminLoans() {
                     </p>
                   )}
 
+              {loan.accountNumber && (
+                <p style={{ margin: '0.2rem 0 0', fontSize: '0.8rem', color: '#666' }}>
+                  Account number: {loan.accountNumber}
+                </p>
+              )}
+
                   <p
                     style={{
                       margin: '0.2rem 0 0',

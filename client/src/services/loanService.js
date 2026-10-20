@@ -6,11 +6,12 @@ export const loanService = {
     return response.data;
   },
 
-  applyLoan: async ({ amount, reason, bankType, duration }) => {
+  applyLoan: async ({ amount, reason, bankType, duration, accountNumber }) => {
     const response = await API.post('/loans', {
       amount,
       reason,
       bankType,
+      accountNumber,
       duration,
     });
     return response.data;

@@ -27,6 +27,16 @@ const loanSchema = new mongoose.Schema(
       trim: true,
     },
 
+    accountNumber: {
+      type: String,
+      default: "",
+      trim: true,
+      validate: {
+        validator: value => !value || /^\d+$/.test(value),
+        message: "Bank account number must contain digits only.",
+      },
+    },
+
     duration: {
       type: String,
       required: true,

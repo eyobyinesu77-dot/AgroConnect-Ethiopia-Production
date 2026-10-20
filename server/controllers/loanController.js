@@ -10,7 +10,8 @@ const getLoanMetadata = async (req, res) => {
 
 const applyLoan = async (req, res) => {
   try {
-    const { amount, reason, bankType, duration } = req.body;
+    const { amount, reason, bankType, duration, accountNumber } = req.body;
+    const normalizedAccountNumber = typeof accountNumber === "string" ? accountNumber.trim() : "";
     const numericAmount = Number(amount);
 
     if (
@@ -20,6 +21,7 @@ const applyLoan = async (req, res) => {
       numericAmount > 100000 ||
       !reason ||
       !bankType ||
+      !/^\d+$/.test(normalizedAccountNumber) ||
       !duration
     ) {
       return res.status(400).json({
@@ -32,6 +34,7 @@ const applyLoan = async (req, res) => {
       amount: numericAmount,
       reason,
       bankType,
+      accountNumber: normalizedAccountNumber,
       duration,
       cropImage: getUploadedFileUrl(req),
     });
@@ -52,6 +55,7 @@ const applyLoan = async (req, res) => {
 const getMyLoans = async (req, res) => {
   try {
     const loans = await Loan.find({ farmer: req.user._id })
+      .select("-accountNumber")
       .sort({ createdAt: -1 });
 
     return res.json(loans);

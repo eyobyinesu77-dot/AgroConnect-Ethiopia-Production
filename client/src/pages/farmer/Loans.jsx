@@ -29,6 +29,7 @@ export default function FarmerLoans() {
 
   const [bankType, setBankType] = useState('');
   const [customBank, setCustomBank] = useState('');
+  const [accountNumber, setAccountNumber] = useState('');
   const [amount, setAmount] = useState('');
   const [reason, setReason] = useState('');
   const [customReason, setCustomReason] = useState('');
@@ -82,6 +83,7 @@ export default function FarmerLoans() {
   const resetForm = () => {
     setBankType('');
     setCustomBank('');
+    setAccountNumber('');
     setAmount('');
     setReason('');
     setCustomReason('');
@@ -96,6 +98,10 @@ export default function FarmerLoans() {
     }
     if (bankType === 'Other' && !customBank.trim()) {
       toast.error(t('loans_err_bank_custom'));
+      return;
+    }
+    if (accountNumber.trim().length === 0 || Array.from(accountNumber.trim()).some(ch => ch < "0" || ch > "9")) {
+      toast.error('Enter a valid bank account number using digits only.');
       return;
     }
     const parsedAmount = Number(String(amount).replace(/,/g, '').trim());
@@ -125,6 +131,7 @@ export default function FarmerLoans() {
         amount: parsedAmount,
         reason: finalReason,
         bankType: finalBankType,
+        accountNumber: accountNumber.trim(),
         duration: duration.trim(),
       });
       toast.success(t('loans_submitted_toast'));
@@ -167,6 +174,21 @@ export default function FarmerLoans() {
                 style={{ width: '100%', padding: '0.6rem', borderRadius: '4px', border: '1px solid #ccc', boxSizing: 'border-box', marginTop: '0.5rem' }}
               />
             )}
+          </div>
+
+          <div>
+            <label style={{ display: 'block', marginBottom: '0.3rem', fontSize: '0.9rem' }}>Bank account number</label>
+            <input
+              type="text"
+              inputMode="numeric"
+              autoComplete="off"
+              value={accountNumber}
+              onChange={(e) => setAccountNumber(e.target.value.replace(/[^0-9]/g, ""))}
+              placeholder="Enter your bank account number"
+              aria-label="Bank account number"
+              required
+              style={{ width: '100%', padding: '0.6rem', borderRadius: '4px', border: '1px solid #ccc', boxSizing: 'border-box' }}
+            />
           </div>
 
           <div>
