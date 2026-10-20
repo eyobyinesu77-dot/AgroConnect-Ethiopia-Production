@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { paymentService } from '../../services/paymentService';
 import { useLanguage } from '../../context/LanguageContext';
@@ -13,6 +13,7 @@ export default function TelebirrProofUpload({ paymentId, onUploaded }) {
   const { t } = useLanguage();
   const [transactionId, setTransactionId] = useState('');
   const [file, setFile] = useState(null);
+  const fileInputRef = useRef(null);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -88,7 +89,21 @@ export default function TelebirrProofUpload({ paymentId, onUploaded }) {
         <label style={{ display: 'block', fontSize: '0.8rem', color: '#555', marginBottom: '0.25rem' }}>
           {t('telebirr_screenshot_label')} <span style={{ color: '#d32f2f' }}>*</span>
         </label>
-        <input type="file" accept="image/*" onChange={handleFileChange} disabled={isSubmitting} style={{ fontSize: '0.85rem' }} />
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          onChange={handleFileChange}
+          disabled={isSubmitting}
+          style={{ fontSize: '0.85rem' }}
+        />
+        <button
+          type="button"
+          disabled={isSubmitting}
+          onClick={() => fileInputRef.current?.click()}
+        >
+          {file ? file.name : 'Choose Screenshot'}
+        </button>
       </div>
 
       {previewUrl && (
