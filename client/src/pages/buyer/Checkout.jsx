@@ -197,11 +197,17 @@ export default function BuyerCheckout() {
        * - Invalid quantity format (backend validation)
        * - Network error
        */
-      console.error('Order submission error:', error.message);
+      console.error('Order submission error:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data,
+        url: error.config?.url,
+      });
 
-      const errorMessage = t(apiErrorKey(error, 'checkout_order_failed', 'checkout_order_failed'));
+      const backendMessage = error.response?.data?.message;
+      const errorMessage = backendMessage ||
+        t(apiErrorKey(error, 'checkout_order_failed', 'checkout_order_failed'));
 
-      // Show specific error message from backend
       toast.error(errorMessage);
 
       // Don't clear cart if order failed - user can retry
