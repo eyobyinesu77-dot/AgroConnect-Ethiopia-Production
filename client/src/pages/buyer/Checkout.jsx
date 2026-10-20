@@ -163,12 +163,21 @@ export default function BuyerCheckout() {
        * If payment fails, order still exists - buyer can retry from Orders page
        */
       try {
-        await paymentService.initializePayment({
+        const paymentResult = await paymentService.initializePayment({
           orderId: order._id,
           paymentMethod,
         });
 
-        toast.success(t('checkout_paid_success'));
+        // Redirect to Chapa. Initialization alone does not mean payment succeeded.
+        if (paymentResult.checkoutUrl) {
+          window.location.href = paymentResult.checkoutUrl;
+          return;
+        }
+
+        // Telebirr remains pending until proof is reviewed.
+        if (paymentMethod === 'Telebirr') {
+          toast.success('Order created. Continue with Telebirr from your Orders page.');
+        }
       } catch (paymentError) {
         /**
          * Payment failed, but order was created successfully

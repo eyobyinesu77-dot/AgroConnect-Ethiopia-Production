@@ -6,6 +6,8 @@ const paymentSchema = new mongoose.Schema({
   amount: { type: Number, required: true },
   paymentMethod: { type: String, required: true },
   status: { type: String, enum: ['Success', 'Failed', 'Pending'], default: 'Pending' },
+  // Chapa reference used to verify the exact transaction.
+  tx_ref: { type: String, unique: true, sparse: true, trim: true },
   // Telebirr screenshot for manual payment verification
   proofOfPayment: {
     url: { type: String },  // Cloudinary URL of uploaded screenshot

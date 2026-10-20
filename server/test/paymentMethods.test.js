@@ -9,10 +9,12 @@ const assert = require('node:assert/strict');
 const Module = require('module');
 
 // ---------- fakes ----------
-const calls = { paymentCreate: [], orderFindById: 0, axiosPost: [], orderCreate: [] };
+const calls = { paymentCreate: [], orderFindById: 0, axiosPost: [], axiosGet: [], orderCreate: [] };
 let orderDoc = null;
 let paymentDoc = null;
 let otherPayment = null;
+let chapaPayment = null;
+let chapaVerification = { status: 'success', tx_ref: 'agroconnect-order1-123', amount: 500, currency: 'ETB' };
 
 const thenable = (value, extra = {}) => Object.assign(Promise.resolve(value), extra);
 
@@ -32,7 +34,13 @@ const FakePayment = {
     return { _id: 'pay1', ...data };
   },
   findById: async () => paymentDoc,
-  findOne: async () => otherPayment,
+  findOne: async (query) => {
+    if (query && query.tx_ref) {
+      calls.chapaLookup = query;
+      return chapaPayment;
+    }
+    return otherPayment;
+  },
   findOneAndUpdate: async () => null,
 };
 const FakeProduct = {
@@ -46,7 +54,10 @@ const fakeAxios = {
     calls.axiosPost.push({ url, body, cfg });
     return { data: { data: { checkout_url: 'https://checkout.chapa.co/pay/abc' } } };
   },
-  get: async () => ({ data: { data: { status: 'success' } } }),
+  get: async (url, cfg) => {
+    calls.axiosGet.push({ url, cfg });
+    return { data: { data: { ...chapaVerification } } };
+  },
 };
 const fakeNotify = { notifyUser: () => {} };
 
@@ -63,7 +74,7 @@ Module._load = function (request, parent) {
   return realLoad.apply(this, arguments);
 };
 
-const { processPayment, uploadTelebirrProof } = require('../controllers/paymentController');
+const { processPayment, uploadTelebirrProof, chapaWebhook } = require('../controllers/paymentController');
 const { createOrder } = require('../controllers/orderController');
 
 // ---------- helpers ----------
@@ -92,11 +103,15 @@ const freshOrder = (over = {}) => ({
 const reset = () => {
   calls.paymentCreate.length = 0;
   calls.axiosPost.length = 0;
+  calls.axiosGet.length = 0;
+  calls.chapaLookup = null;
   calls.orderCreate.length = 0;
   calls.orderFindById = 0;
   orderDoc = freshOrder();
   paymentDoc = null;
   otherPayment = null;
+  chapaPayment = null;
+  chapaVerification = { status: 'success', tx_ref: 'agroconnect-order1-123', amount: 500, currency: 'ETB' };
   delete process.env.CHAPA_SECRET_KEY;
 };
 
@@ -124,17 +139,15 @@ test('missing paymentMethod is still a 400', async () => {
   assert.equal(calls.paymentCreate.length, 0);
 });
 
-test('Chapa (no key configured, demo mode): unchanged simulated instant success', async () => {
+test('Chapa without a secret key is rejected and never marked successful', async () => {
   reset();
   const res = await call(processPayment, { body: { orderId: 'order1', paymentMethod: 'Chapa' } });
-  assert.equal(res.statusCode, 201);
-  assert.equal(res.body.message, 'Payment completed successfully!');
+  assert.equal(res.statusCode, 503);
+  assert.match(res.body.message, /CHAPA_SECRET_KEY/);
   assert.equal(calls.axiosPost.length, 0, 'no network call without a key');
-  assert.equal(calls.paymentCreate.length, 1);
-  assert.equal(calls.paymentCreate[0].paymentMethod, 'Chapa');
-  assert.equal(calls.paymentCreate[0].status, 'Success');
-  assert.equal(orderDoc.paymentMethod, 'Chapa');
-  assert.equal(orderDoc.paymentStatus, 'Paid');
+  assert.equal(calls.paymentCreate.length, 0, 'no payment record without real initialization');
+  assert.equal(orderDoc.paymentMethod, undefined);
+  assert.equal(orderDoc.paymentStatus, 'Unpaid');
 });
 
 test('Chapa (key configured): initializes a real Chapa transaction and returns checkoutUrl, order stays Unpaid', async () => {
@@ -192,6 +205,9 @@ test('Telebirr proof upload still works, and is refused for a non-Telebirr payme
 test('an older order stored as "Cash on Delivery" can still be paid with Chapa or Telebirr', async () => {
   for (const method of ['Chapa', 'Telebirr']) {
     reset();
+    if (method === 'Chapa') {
+      process.env.CHAPA_SECRET_KEY = 'CHASECK_TEST-placeholder';
+    }
     orderDoc = freshOrder({ paymentMethod: 'Cash on Delivery' });
     const res = await call(processPayment, { body: { orderId: 'order1', paymentMethod: method } });
     assert.equal(res.statusCode, 201);
@@ -228,4 +244,171 @@ test('POST /api/orders cannot smuggle a payment method in: createOrder ignores b
   assert.equal(calls.orderCreate.length, 1);
   assert.equal('paymentMethod' in calls.orderCreate[0], false);
   assert.equal('paymentStatus' in calls.orderCreate[0], false);
+});
+
+
+// ---------- Chapa webhook verification tests ----------
+test('Chapa webhook: successful verification marks the matching order and payment paid', async () => {
+  reset();
+  process.env.CHAPA_SECRET_KEY = 'CHASECK_TEST-placeholder';
+
+  chapaPayment = {
+    _id: 'payChapa1',
+    order: 'order1',
+    paymentMethod: 'Chapa',
+    tx_ref: 'agroconnect-order1-123',
+    amount: 500,
+    status: 'Pending',
+    save: async () => {},
+  };
+  orderDoc = freshOrder({ paymentMethod: 'Chapa' });
+
+  const res = await call(chapaWebhook, {
+    body: { tx_ref: 'agroconnect-order1-123' },
+  });
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.message, 'Chapa payment verified successfully.');
+  assert.equal(orderDoc.paymentStatus, 'Paid');
+  assert.equal(chapaPayment.status, 'Success');
+  assert.equal(calls.axiosGet.length, 1);
+  assert.match(calls.axiosGet[0].url, /agroconnect-order1-123$/);
+  assert.equal(
+    calls.axiosGet[0].cfg.headers.Authorization,
+    'Bearer CHASECK_TEST-placeholder'
+  );
+  assert.deepEqual(calls.chapaLookup, {
+    tx_ref: 'agroconnect-order1-123',
+    paymentMethod: 'Chapa',
+  });
+});
+
+test('Chapa webhook: mismatched verification details never mark payment paid', async (t) => {
+  const cases = [
+    {
+      name: 'wrong amount',
+      verification: {
+        status: 'success',
+        tx_ref: 'agroconnect-order1-123',
+        amount: 499,
+        currency: 'ETB',
+      },
+    },
+    {
+      name: 'wrong transaction reference',
+      verification: {
+        status: 'success',
+        tx_ref: 'different-reference',
+        amount: 500,
+        currency: 'ETB',
+      },
+    },
+    {
+      name: 'unsuccessful transaction',
+      verification: {
+        status: 'failed',
+        tx_ref: 'agroconnect-order1-123',
+        amount: 500,
+        currency: 'ETB',
+      },
+    },
+    {
+      name: 'wrong currency',
+      verification: {
+        status: 'success',
+        tx_ref: 'agroconnect-order1-123',
+        amount: 500,
+        currency: 'USD',
+      },
+    },
+  ];
+
+  for (const item of cases) {
+    await t.test(item.name, async () => {
+      reset();
+      process.env.CHAPA_SECRET_KEY = 'CHASECK_TEST-placeholder';
+      chapaVerification = item.verification;
+      chapaPayment = {
+        _id: 'payChapa1',
+        order: 'order1',
+        paymentMethod: 'Chapa',
+        tx_ref: 'agroconnect-order1-123',
+        amount: 500,
+        status: 'Pending',
+        save: async () => {},
+      };
+      orderDoc = freshOrder({ paymentMethod: 'Chapa' });
+
+      const res = await call(chapaWebhook, {
+        body: { tx_ref: 'agroconnect-order1-123' },
+      });
+
+      assert.equal(res.statusCode, 200);
+      assert.equal(
+        res.body.message,
+        'Chapa verification did not match the expected transaction.'
+      );
+      assert.equal(orderDoc.paymentStatus, 'Unpaid');
+      assert.equal(chapaPayment.status, 'Pending');
+    });
+  }
+});
+
+test('Chapa webhook: missing secret key or transaction reference is rejected', async () => {
+  reset();
+
+  const missingKey = await call(chapaWebhook, {
+    body: { tx_ref: 'agroconnect-order1-123' },
+  });
+  assert.equal(missingKey.statusCode, 400);
+  assert.equal(calls.axiosGet.length, 0);
+
+  process.env.CHAPA_SECRET_KEY = 'CHASECK_TEST-placeholder';
+  const missingReference = await call(chapaWebhook, { body: {} });
+  assert.equal(missingReference.statusCode, 400);
+  assert.equal(calls.axiosGet.length, 0);
+});
+
+test('Chapa webhook: unknown transaction reference is rejected without verification', async () => {
+  reset();
+  process.env.CHAPA_SECRET_KEY = 'CHASECK_TEST-placeholder';
+
+  const res = await call(chapaWebhook, {
+    body: { tx_ref: 'unknown-reference' },
+  });
+
+  assert.equal(res.statusCode, 404);
+  assert.equal(
+    res.body.message,
+    'Chapa transaction reference was not found.'
+  );
+  assert.equal(calls.axiosGet.length, 0);
+});
+
+test('Chapa webhook: cancelled orders are never marked paid', async () => {
+  reset();
+  process.env.CHAPA_SECRET_KEY = 'CHASECK_TEST-placeholder';
+
+  chapaPayment = {
+    _id: 'payChapa1',
+    order: 'order1',
+    paymentMethod: 'Chapa',
+    tx_ref: 'agroconnect-order1-123',
+    amount: 500,
+    status: 'Pending',
+    save: async () => {},
+  };
+  orderDoc = freshOrder({
+    paymentMethod: 'Chapa',
+    status: 'Cancelled',
+  });
+
+  const res = await call(chapaWebhook, {
+    body: { tx_ref: 'agroconnect-order1-123' },
+  });
+
+  assert.equal(res.statusCode, 409);
+  assert.equal(res.body.message, 'Cancelled orders cannot be marked paid.');
+  assert.equal(orderDoc.paymentStatus, 'Unpaid');
+  assert.equal(chapaPayment.status, 'Pending');
 });

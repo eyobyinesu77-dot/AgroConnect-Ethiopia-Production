@@ -8,30 +8,19 @@ const { notifyUser } = require('../utils/notify');
 const ALLOWED_METHODS = ['Chapa', 'Telebirr'];
 
 // --- Chapa integration -----------------------------------------------------
-// Real integration, gated behind an environment variable so the app still
-// works out of the box for a demo without any keys configured.
-//
-// Set CHAPA_SECRET_KEY in server/.env (get one from https://dashboard.chapa.co)
-// to switch this from simulated to a real "initialize transaction" call
-// against Chapa's documented REST API. This has NOT been exercised against
-// Chapa's live/test servers in this environment (no network access here) —
-// test it yourself with a Chapa test secret key before relying on it.
-//
-// Chapa's real flow is actually two steps, not one:
-//   1. POST /v1/transaction/initialize  → returns a checkout_url
-//   2. The buyer is redirected to checkout_url to enter card/mobile details
-//   3. Chapa calls your webhook (or you poll GET /v1/transaction/verify/:tx_ref)
-//      to confirm the payment actually succeeded
-// A single request/response, as this function currently returns, can only
-// ever cover step 1. Marking the order "Paid" immediately after step 1 (as
-// this simulation does) is NOT safe for production — do that only after a
-// verified webhook/verify call confirms the transaction.
+// Uses Chapa's transaction initialization API and requires CHAPA_SECRET_KEY.
+// Initialization creates a Pending payment; it does not mean the buyer has paid.
+// The buyer completes checkout at Chapa, and the public callback handler
+// independently verifies the transaction with Chapa before marking it Paid.
+// Configure CHAPA_CALLBACK_URL and CLIENT_URL in the deployment environment.
+// Test with Chapa test credentials before relying on the integration in production.
 const initializeChapaPayment = async ({ order, user }) => {
   const secretKey = process.env.CHAPA_SECRET_KEY;
 
   if (!secretKey) {
-    // No key configured — fall back to the simulated instant-success flow.
-    return { simulated: true, status: 'Success' };
+    const error = new Error('Chapa payments are unavailable: CHAPA_SECRET_KEY is not configured.');
+    error.statusCode = 503;
+    throw error;
   }
 
   const tx_ref = `agroconnect-${order._id}-${Date.now()}`;
@@ -84,12 +73,14 @@ const processPayment = async (req, res) => {
     }
 
     let checkoutUrl = null;
+    let txRef = null;
     let paymentStatus = 'Pending';
 
     if (paymentMethod === 'Chapa') {
       const result = await initializeChapaPayment({ order, user: req.user });
       paymentStatus = result.status;
       checkoutUrl = result.checkoutUrl || null;
+      txRef = result.tx_ref || null;
     } else {
       // Telebirr has no publicly documented self-serve sandbox API — this
       // stays simulated until a real merchant integration is set up with
@@ -104,6 +95,7 @@ const processPayment = async (req, res) => {
       amount: order.totalPrice,
       paymentMethod,
       status: paymentStatus,
+      ...(paymentMethod === 'Chapa' && txRef ? { tx_ref: txRef } : {}),
     });
 
     order.paymentMethod = paymentMethod;
@@ -135,7 +127,7 @@ const processPayment = async (req, res) => {
       checkoutUrl,
     });
   } catch (error) {
-    res.status(500).json({ message: error.response?.data?.message || error.message });
+    res.status(error.statusCode || 500).json({ message: error.response?.data?.message || error.message });
   }
 };
 
@@ -170,31 +162,57 @@ const getAllPayments = async (req, res) => {
 const chapaWebhook = async (req, res) => {
   try {
     const secretKey = process.env.CHAPA_SECRET_KEY;
-    const { tx_ref } = req.body;
-    if (!secretKey || !tx_ref) {
+    const tx_ref = req.body && req.body.tx_ref;
+
+    if (!secretKey || !tx_ref || typeof tx_ref !== 'string') {
       return res.status(400).json({ message: 'Missing tx_ref or Chapa is not configured.' });
     }
 
-    const verifyRes = await axios.get(`https://api.chapa.co/v1/transaction/verify/${tx_ref}`, {
-      headers: { Authorization: `Bearer ${secretKey}` },
-    });
-
-    if (verifyRes.data?.data?.status !== 'success') {
-      return res.status(200).json({ message: 'Payment not yet successful, ignoring.' });
+    // Match the exact Chapa transaction recorded during initialization.
+    const payment = await Payment.findOne({ tx_ref, paymentMethod: 'Chapa' });
+    if (!payment) {
+      return res.status(404).json({ message: 'Chapa transaction reference was not found.' });
     }
 
-    // tx_ref was constructed as `agroconnect-<orderId>-<timestamp>` in initializeChapaPayment.
-    const orderId = tx_ref.split('-')[1];
-    const order = await Order.findById(orderId);
-    if (order && order.paymentStatus !== 'Paid') {
+    const verifyRes = await axios.get(
+      'https://api.chapa.co/v1/transaction/verify/' + encodeURIComponent(tx_ref),
+      { headers: { Authorization: 'Bearer ' + secretKey } }
+    );
+    const verified = verifyRes.data && verifyRes.data.data;
+
+    if (
+      !verified ||
+      String(verified.status || '').toLowerCase() !== 'success' ||
+      verified.tx_ref !== tx_ref ||
+      Number(verified.amount) !== Number(payment.amount) ||
+      String(verified.currency || '').toUpperCase() !== 'ETB'
+    ) {
+      return res.status(200).json({ message: 'Chapa verification did not match the expected transaction.' });
+    }
+
+    const order = await Order.findById(payment.order);
+    if (!order) {
+      return res.status(404).json({ message: 'Order for this payment was not found.' });
+    }
+    if (order.paymentMethod !== 'Chapa') {
+      return res.status(409).json({ message: 'Order payment method does not match this Chapa transaction.' });
+    }
+    if (order.status === 'Cancelled') {
+      return res.status(409).json({ message: 'Cancelled orders cannot be marked paid.' });
+    }
+
+    if (order.paymentStatus !== 'Paid') {
       order.paymentStatus = 'Paid';
       await order.save();
-      await Payment.findOneAndUpdate({ order: order._id, paymentMethod: 'Chapa' }, { status: 'Success' });
+    }
+    if (payment.status !== 'Success') {
+      payment.status = 'Success';
+      await payment.save();
     }
 
-    res.status(200).json({ message: 'Webhook processed.' });
+    return res.status(200).json({ message: 'Chapa payment verified successfully.' });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return res.status(500).json({ message: error.message });
   }
 };
 
