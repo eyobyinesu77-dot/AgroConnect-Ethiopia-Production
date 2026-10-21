@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { logisticsService } from '../../services/logisticsService';
-import { logisticsRegions, productUnits } from '../../utils/constants';
+import { cropTypes, logisticsRegions, productUnits } from '../../utils/constants';
 import { useLanguage } from '../../context/LanguageContext';
 import ProviderDirectory from './ProviderDirectory';
 
@@ -97,7 +97,12 @@ export default function LogisticsPanel({ defaultPickupRegion = '' }) {
           <form onSubmit={handleSubmit} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem' }}>
             <div>
               <label style={labelStyle}>{t('lg_crop')}</label>
-              <input name="cropName" value={form.cropName} onChange={handleChange} required style={inputStyle} />
+              <select name="cropName" value={form.cropName} onChange={handleChange} required style={inputStyle}>
+                <option value="">Select crop type</option>
+                {cropTypes.map((crop) => (
+                  <option key={crop} value={crop}>{crop}</option>
+                ))}
+              </select>
             </div>
             <div>
               <label style={labelStyle}>{t('lg_quantity')}</label>
