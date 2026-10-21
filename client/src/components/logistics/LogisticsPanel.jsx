@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { logisticsService } from '../../services/logisticsService';
 import { cropTypes, logisticsRegions, productUnits } from '../../utils/constants';
+import LogisticsPickupDropdown from './LogisticsPickupDropdown';
 import { useLanguage } from '../../context/LanguageContext';
 import ProviderDirectory from './ProviderDirectory';
 
@@ -114,21 +115,12 @@ export default function LogisticsPanel({ defaultPickupRegion = '' }) {
                 {productUnits.map((u) => <option key={u} value={u}>{u}</option>)}
               </select>
             </div>
-            <div>
-              <label style={labelStyle}>{t('lg_pickup_region')}</label>
-              <select name="pickupRegion" value={form.pickupRegion} onChange={handleChange} required style={inputStyle}>
-                <option value="">{t('lg_select_region')}</option>
-                {logisticsRegions.map((r) => <option key={r} value={r}>{r}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={labelStyle}>{t('lg_pickup_zone')}</label>
-              <input name="pickupZone" value={form.pickupZone} onChange={handleChange} style={inputStyle} />
-            </div>
-            <div>
-              <label style={labelStyle}>{t('lg_pickup_woreda')}</label>
-              <input name="pickupWoreda" value={form.pickupWoreda} onChange={handleChange} style={inputStyle} />
-            </div>
+            <LogisticsPickupDropdown
+              value={form}
+              onChange={(changes) =>
+                setForm((current) => ({ ...current, ...changes }))
+              }
+            />
             <div>
               <label style={labelStyle}>{t('lg_dest_region')}</label>
               <select name="destinationRegion" value={form.destinationRegion} onChange={handleChange} required style={inputStyle}>
