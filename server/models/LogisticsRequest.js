@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 
-const REQUEST_STATUSES = ['Pending', 'Batched', 'Assigned', 'In Transit', 'Delivered', 'Cancelled'];
+const REQUEST_STATUSES = ['Pending', 'Batched', 'Partially Assigned', 'Assigned', 'In Transit', 'Delivered', 'Cancelled'];
 const UNITS = ['Quintal', 'Kg', 'Liter'];
 
 // A farmer's or buyer's request to have goods transported (PRD: Logistics
@@ -13,7 +13,8 @@ const logisticsRequestSchema = new mongoose.Schema({
   cropName: { type: String, required: true, trim: true },
   quantity: { type: Number, required: true, min: 0.01 },
   unit: { type: String, enum: UNITS, default: 'Quintal' },
-  quantityKg: { type: Number, required: true }, // normalised so requests are comparable
+  quantityKg: { type: Number, required: true },
+  allocatedQuantityKg: { type: Number, default: 0, min: 0 }, // normalised so requests are comparable
   pickupRegion: { type: String, required: true, trim: true },
   pickupZone: { type: String, trim: true },
   pickupWoreda: { type: String, trim: true },

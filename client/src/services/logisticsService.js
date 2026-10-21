@@ -16,14 +16,18 @@ export const logisticsService = {
   // Requests (admin)
   getAllRequests: async (params = {}) => (await API.get('/logistics', { params })).data,
   getMatches: async (id) => (await API.get(`/logistics/${id}/matches`)).data,
-  assignProvider: async (id, providerId) => (await API.patch(`/logistics/${id}/assign`, { providerId })).data,
+  allocateRequest: async (id, providerId, quantityKg) => (await API.post(`/logistics/${id}/allocations`, { providerId, quantityKg })).data,
   updateStatus: async (id, status) => (await API.patch(`/logistics/${id}/status`, { status })).data,
+  updateAllocationStatus: async (allocationId, status) =>
+    (await API.patch('/logistics/allocations/' + allocationId + '/status', { status })).data,
 
   // Aggregation (admin)
   getSuggestions: async () => (await API.get('/logistics/aggregation/suggestions')).data,
   getBatches: async () => (await API.get('/logistics/aggregation/batches')).data,
   createBatch: async (requestIds, providerId) =>
     (await API.post('/logistics/aggregation/batches', { requestIds, providerId })).data,
+  allocateBatch: async (id, providerId, portions) =>
+    (await API.post(`/logistics/aggregation/batches/${id}/allocations`, { providerId, portions })).data,
   assignBatchProvider: async (id, providerId) =>
     (await API.patch(`/logistics/aggregation/batches/${id}/assign`, { providerId })).data,
 };

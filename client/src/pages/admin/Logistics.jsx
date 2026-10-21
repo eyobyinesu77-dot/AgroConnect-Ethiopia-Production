@@ -17,6 +17,9 @@ export default function AdminLogistics() {
   const [batches, setBatches] = useState([]);
   const [providers, setProviders] = useState([]);
   const [choice, setChoice] = useState({}); // per-row selected provider id
+  const [requestPortions, setRequestPortions] = useState({}); // kg allocated per request
+  const [batchProviderChoice, setBatchProviderChoice] = useState({});
+  const [batchPortions, setBatchPortions] = useState({});
   const [loading, setLoading] = useState(true);
   const [assigning, setAssigning] = useState(null); // id currently being assigned
 
@@ -59,45 +62,109 @@ export default function AdminLogistics() {
     }
   };
 
-  /**
-   * Rank providers for a request:
-   * 1. Region + capacity match (best)
-   * 2. Capacity match any region
-   * 3. All available providers (even under-capacity) so the admin always sees options
-   *    and can still assign (backend will reject true under-capacity).
-   */
-  const providersForRequest = (r) => {
-    if (!providers.length) return { list: [], matched: false, underCapacityOnly: false };
-
-    const capacityOk = providers.filter((p) => Number(p.capacityKg) >= Number(r.quantityKg));
-    const matching = capacityOk.filter(
-      (p) => Array.isArray(p.regionsServed) && p.regionsServed.includes(r.pickupRegion)
+  // Filter providers against the requested portion, not the entire request.
+  const providersForRequest = (r, quantityKg) => {
+    const eligible = providers.filter((p) =>
+      p.isAvailable !== false &&
+      Number(p.capacityKg) >= quantityKg &&
+      Array.isArray(p.regionsServed) &&
+      p.regionsServed.includes(r.pickupRegion) &&
+      p.regionsServed.includes(r.destinationRegion)
     );
-    if (matching.length > 0) return { list: matching, matched: true, underCapacityOnly: false };
-    if (capacityOk.length > 0) return { list: capacityOk, matched: false, underCapacityOnly: false };
-    // Last resort: show everyone so the dropdown is never blank when providers exist
-    return { list: providers, matched: false, underCapacityOnly: true };
+    return { list: eligible, matched: eligible.length > 0, underCapacityOnly: false };
   };
 
   const providersForBatch = (b) => {
-    if (!providers.length) return { list: [], matched: false, underCapacityOnly: false };
-
-    const capacityOk = providers.filter((p) => Number(p.capacityKg) >= Number(b.totalQuantityKg));
-    const matching = capacityOk.filter(
-      (p) => Array.isArray(p.regionsServed) && p.regionsServed.includes(b.pickupRegion)
+    const eligible = providers.filter((p) =>
+      p.isAvailable !== false &&
+      Array.isArray(p.regionsServed) &&
+      p.regionsServed.includes(b.pickupRegion) &&
+      p.regionsServed.includes(b.destinationRegion)
     );
-    if (matching.length > 0) return { list: matching, matched: true, underCapacityOnly: false };
-    if (capacityOk.length > 0) return { list: capacityOk, matched: false, underCapacityOnly: false };
-    return { list: providers, matched: false, underCapacityOnly: true };
+    return {
+      list: eligible,
+      matched: eligible.length > 0,
+      underCapacityOnly: false,
+    };
+  };
+
+  const handleAllocateBatch = (b) => {
+    const providerId = batchProviderChoice[b._id];
+
+    if (!providerId) {
+      toast.error('Choose a transport provider first.');
+      return;
+    }
+
+    const portions = [];
+    for (const r of (b.requests || [])) {
+      const raw = batchPortions[b._id]?.[r._id];
+      if (raw === undefined || String(raw).trim() === '') continue;
+
+      const quantityKg = Number(raw);
+      const remainingKg = Math.max(
+        0,
+        Number(r.quantityKg || 0) - Number(r.allocatedQuantityKg || 0)
+      );
+
+      if (!Number.isFinite(quantityKg) || quantityKg <= 0) {
+        toast.error('Each allocation must be a positive kg amount.');
+        return;
+      }
+
+      if (quantityKg > remainingKg) {
+        toast.error(`Allocation for a request cannot exceed ${remainingKg} kg remaining.`);
+        return;
+      }
+
+      portions.push({ requestId: r._id, quantityKg });
+    }
+
+    if (!portions.length) {
+      toast.error('Enter a positive kg amount for at least one request.');
+      return;
+    }
+
+    const total = portions.reduce((sum, p) => sum + p.quantityKg, 0);
+    const provider = providers.find((p) => p._id === providerId);
+
+    if (provider && total > Number(provider.capacityKg)) {
+      toast.error(`Allocation total exceeds provider capacity of ${provider.capacityKg} kg.`);
+      return;
+    }
+
+    run(
+      b._id,
+      () => logisticsService.allocateBatch(b._id, providerId, portions),
+      'lg_assigned_ok'
+    );
   };
 
   const handleAssignRequest = (r) => {
     const providerId = choice[r._id];
+    const allocatedKg = Number(r.allocatedQuantityKg || 0);
+    const remainingKg = Math.max(0, Number(r.quantityKg || 0) - allocatedKg);
+    const quantityKg = Number(requestPortions[r._id] ?? String(remainingKg));
+    const provider = providers.find((p) => p._id === providerId);
+
     if (!providerId) {
       toast.error(t('lg_select_provider_first'));
       return;
     }
-    run(r._id, () => logisticsService.assignProvider(r._id, providerId), 'lg_assigned_ok');
+    if (!Number.isFinite(quantityKg) || quantityKg <= 0 || quantityKg > remainingKg) {
+      toast.error(`Enter a positive allocation no greater than ${remainingKg} kg remaining.`);
+      return;
+    }
+    if (!provider || quantityKg > Number(provider.capacityKg)) {
+      toast.error("Allocation must not exceed the selected provider's capacity.");
+      return;
+    }
+
+    run(
+      r._id,
+      () => logisticsService.allocateRequest(r._id, providerId, quantityKg),
+      'lg_assigned_ok'
+    );
   };
 
   const handleAssignBatch = (b) => {
@@ -214,7 +281,10 @@ export default function AdminLogistics() {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
           {requests.map((r) => {
-            const { list: fits, matched, underCapacityOnly } = providersForRequest(r);
+            const allocatedKg = Number(r.allocatedQuantityKg || 0);
+            const remainingKg = Math.max(0, Number(r.quantityKg || 0) - allocatedKg);
+            const portionKg = Number(requestPortions[r._id] || remainingKg);
+            const { list: fits, matched, underCapacityOnly } = providersForRequest(r, portionKg);
             const isAssigning = assigning === r._id;
             return (
               <div key={r._id} style={cardStyle}>
@@ -231,14 +301,35 @@ export default function AdminLogistics() {
                   {r.pickupRegion} → {r.destinationRegion}
                   {r.destinationAddress ? `, ${r.destinationAddress}` : ''}
                 </p>
+                <p style={{ margin: '0.2rem 0', fontSize: '0.85rem', color: '#555' }}>
+                  Allocated: {formatNumber(allocatedKg)} kg · Remaining: {formatNumber(remainingKg)} kg
+                </p>
                 {r.assignedProvider && (
                   <p style={{ margin: '0.3rem 0', fontSize: '0.85rem', color: '#2e7d32' }}>
                     {t('lg_assigned_to')}: {r.assignedProvider.name} · {r.assignedProvider.phone}
                   </p>
                 )}
                 <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.5rem', alignItems: 'flex-start' }}>
-                  {r.status === 'Pending' && (
+                  {['Pending', 'Partially Assigned'].includes(r.status) && remainingKg > 0 && (
                     <>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', minWidth: '160px' }}>
+                        <label htmlFor={`request-portion-${r._id}`} style={{ fontSize: '0.8rem' }}>
+                          Allocate quantity (kg)
+                        </label>
+                        <input
+                          id={`request-portion-${r._id}`}
+                          type="number"
+                          min="0.01"
+                          max={remainingKg}
+                          step="any"
+                          value={requestPortions[r._id] ?? String(remainingKg)}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            setRequestPortions((prev) => ({ ...prev, [r._id]: value }));
+                          }}
+                          style={{ padding: '0.4rem', borderRadius: '4px', border: '1px solid #ccc', width: '100%' }}
+                        />
+                      </div>
                       {renderProviderSelect(r._id, fits, matched, underCapacityOnly)}
                       <button
                         type="button"
@@ -254,24 +345,60 @@ export default function AdminLogistics() {
                       </button>
                     </>
                   )}
-                  {r.status === 'Assigned' && (
-                    <button
-                      type="button"
-                      onClick={() => run(r._id, () => logisticsService.updateStatus(r._id, 'In Transit'), 'lg_status_updated')}
-                      style={btn('#1976d2')}
+                  {(r.allocations || []).map((allocation) => (
+                    <div
+                      key={allocation._id}
+                      style={{
+                        display: 'flex',
+                        gap: '0.5rem',
+                        alignItems: 'center',
+                        flexWrap: 'wrap',
+                        marginTop: '0.5rem',
+                      }}
                     >
-                      {t('lg_mark_in_transit')}
-                    </button>
-                  )}
-                  {r.status === 'In Transit' && (
-                    <button
-                      type="button"
-                      onClick={() => run(r._id, () => logisticsService.updateStatus(r._id, 'Delivered'), 'lg_status_updated')}
-                      style={btn()}
-                    >
-                      {t('lg_mark_delivered')}
-                    </button>
-                  )}
+                      <span style={{ fontSize: '0.85rem' }}>
+                        {allocation.provider?.name || 'Transport provider'}
+                        {' · '}
+                        {formatNumber(allocation.requestPortionQuantityKg)} kg
+                        {' · '}
+                        {tOr(t, logisticsStatusKey(allocation.status), allocation.status)}
+                      </span>
+                      {allocation.status === 'Assigned' && (
+                        <button
+                          type="button"
+                          disabled={assigning === allocation._id}
+                          onClick={() => run(
+                            allocation._id,
+                            () => logisticsService.updateAllocationStatus(
+                              allocation._id,
+                              'In Transit'
+                            ),
+                            'lg_status_updated'
+                          )}
+                          style={btn('#1976d2')}
+                        >
+                          {t('lg_mark_in_transit')}
+                        </button>
+                      )}
+                      {allocation.status === 'In Transit' && (
+                        <button
+                          type="button"
+                          disabled={assigning === allocation._id}
+                          onClick={() => run(
+                            allocation._id,
+                            () => logisticsService.updateAllocationStatus(
+                              allocation._id,
+                              'Delivered'
+                            ),
+                            'lg_status_updated'
+                          )}
+                          style={btn()}
+                        >
+                          {t('lg_mark_delivered')}
+                        </button>
+                      )}
+                    </div>
+                  ))}
                 </div>
               </div>
             );
@@ -295,15 +422,14 @@ export default function AdminLogistics() {
                   {s.requestCount} {t('lg_requests_count')} · {(s.crops || []).join(', ')} · {t('lg_combined_load')}: {formatNumber(s.totalQuantityKg)} {t('unit_kg')}
                 </p>
                 <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'flex-start', marginTop: '0.5rem' }}>
-                  {renderProviderSelect(key, options, matched)}
                   <button
                     type="button"
                     onClick={() =>
-                      run(key, () => logisticsService.createBatch(s.requestIds, choice[key] || undefined), 'lg_batch_created')
+                      run(key, () => logisticsService.createBatch(s.requestIds), 'lg_batch_created')
                     }
                     style={btn()}
                   >
-                    {choice[key] ? t('lg_create_batch_assign') : t('lg_create_batch')}
+                    {t('lg_create_batch')}
                   </button>
                 </div>
                 {matchProviders.length === 0 && (
@@ -320,8 +446,12 @@ export default function AdminLogistics() {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
           {batches.map((b) => {
-            const { list: fits, matched, underCapacityOnly } = providersForBatch(b);
+            const { list: eligibleProviders } = providersForBatch(b);
             const isAssigning = assigning === b._id;
+            const allocatedKg = Number(b.allocatedQuantityKg || 0);
+            const remainingBatchKg = Math.max(0, Number(b.totalQuantityKg || 0) - allocatedKg);
+            const canAllocate = ['Open', 'Partially Assigned'].includes(b.status);
+
             return (
               <div key={b._id} style={cardStyle}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap' }}>
@@ -330,36 +460,175 @@ export default function AdminLogistics() {
                     {tOr(t, logisticsStatusKey(b.status), b.status)}
                   </span>
                 </div>
+
                 <p style={{ margin: '0.3rem 0', fontSize: '0.85rem', color: '#555' }}>
                   {(b.requests || []).length} {t('lg_requests_count')} · {t('lg_combined_load')}: {formatNumber(b.totalQuantityKg)} {t('unit_kg')}
                 </p>
-                <ul style={{ margin: '0.3rem 0', paddingLeft: '1.1rem', fontSize: '0.82rem', color: '#666' }}>
-                  {(b.requests || []).map((r) => (
-                    <li key={r._id}>
-                      {r.requester?.fullName || r.requester?.phone}: {r.cropName}, {formatNumber(r.quantity)} {tOr(t, unitKey(r.unit), r.unit)}
-                    </li>
-                  ))}
+                <p style={{ margin: '0.3rem 0', fontSize: '0.85rem', color: '#555' }}>
+                  Allocated: {formatNumber(allocatedKg)} kg · Remaining: {formatNumber(remainingBatchKg)} kg
+                </p>
+
+                <ul style={{ margin: '0.5rem 0', paddingLeft: '1.1rem', fontSize: '0.85rem', color: '#555' }}>
+                  {(b.requests || []).map((r) => {
+                    const requestKg = Number(r.quantityKg || 0);
+                    const requestAllocatedKg = Number(r.allocatedQuantityKg || 0);
+                    const requestRemainingKg = Math.max(0, requestKg - requestAllocatedKg);
+
+                    return (
+                      <li key={r._id} style={{ marginBottom: '0.65rem' }}>
+                        <div>
+                          {r.requester?.fullName || r.requester?.phone}: {r.cropName}
+                          {' · '}Total {formatNumber(requestKg)} kg
+                          {' · '}Allocated {formatNumber(requestAllocatedKg)} kg
+                          {' · '}Remaining {formatNumber(requestRemainingKg)} kg
+                        </div>
+                        {canAllocate && requestRemainingKg > 0 && (
+                          <label style={{ display: 'inline-flex', gap: '0.4rem', alignItems: 'center', marginTop: '0.25rem' }}>
+                            Allocate kg:
+                            <input
+                              type="number"
+                              min="0"
+                              max={requestRemainingKg}
+                              step="0.01"
+                              value={batchPortions[b._id]?.[r._id] ?? ''}
+                              onChange={(e) => setBatchPortions((previous) => ({
+                                ...previous,
+                                [b._id]: {
+                                  ...(previous[b._id] || {}),
+                                  [r._id]: e.target.value,
+                                },
+                              }))}
+                              style={{ width: '110px', padding: '0.35rem', border: '1px solid #ccc', borderRadius: '4px' }}
+                              aria-label={`Allocation kg for ${r.cropName}`}
+                            />
+                          </label>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
-                {b.provider && (
-                  <p style={{ margin: '0.3rem 0', fontSize: '0.85rem', color: '#2e7d32' }}>
-                    {t('lg_assigned_to')}: {b.provider.name} · {b.provider.phone}
-                  </p>
+
+                {(b.allocations || []).length > 0 && (
+                  <div style={{ marginTop: '0.75rem' }}>
+                    <strong>Transport allocations</strong>
+                    {(b.allocations || []).map((allocation) => (
+                      <div
+                        key={allocation._id}
+                        style={{
+                          border: '1px solid #ddd',
+                          borderRadius: '6px',
+                          padding: '0.65rem',
+                          marginTop: '0.5rem',
+                        }}
+                      >
+                        <div>
+                          <strong>
+                            {allocation.provider?.name || 'Transport provider'}
+                          </strong>
+                          {' · '}
+                          {formatNumber(allocation.totalQuantityKg)} kg
+                          {' · '}
+                          {tOr(t, logisticsStatusKey(allocation.status), allocation.status)}
+                        </div>
+
+                        {(allocation.requestPortions || []).map((portion, index) => (
+                          <div
+                            key={String(portion.request?._id || portion.request || index)}
+                            style={{ fontSize: '0.85rem', marginTop: '0.25rem' }}
+                          >
+                            {portion.request?.requester?.fullName ||
+                              portion.request?.requester?.phone ||
+                              'Farmer'}
+                            {portion.request?.cropName
+                              ? ' · ' + portion.request.cropName
+                              : ''}
+                            {' · '}
+                            {formatNumber(portion.quantityKg)} kg
+                          </div>
+                        ))}
+
+                        <div style={{
+                          display: 'flex',
+                          gap: '0.5rem',
+                          flexWrap: 'wrap',
+                          marginTop: '0.5rem',
+                        }}>
+                          {allocation.status === 'Assigned' && (
+                            <button
+                              type="button"
+                              disabled={assigning === allocation._id}
+                              onClick={() => run(
+                                allocation._id,
+                                () => logisticsService.updateAllocationStatus(
+                                  allocation._id,
+                                  'In Transit'
+                                ),
+                                'lg_status_updated'
+                              )}
+                              style={btn('#1976d2')}
+                            >
+                              {t('lg_mark_in_transit')}
+                            </button>
+                          )}
+
+                          {allocation.status === 'In Transit' && (
+                            <button
+                              type="button"
+                              disabled={assigning === allocation._id}
+                              onClick={() => run(
+                                allocation._id,
+                                () => logisticsService.updateAllocationStatus(
+                                  allocation._id,
+                                  'Delivered'
+                                ),
+                                'lg_status_updated'
+                              )}
+                              style={btn()}
+                            >
+                              {t('lg_mark_delivered')}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 )}
-                {b.status === 'Open' && (
+
+                {canAllocate && (
                   <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'flex-start', marginTop: '0.5rem' }}>
-                    {renderProviderSelect(b._id, fits, matched, underCapacityOnly)}
+                    <select
+                      value={batchProviderChoice[b._id] || ''}
+                      onChange={(e) => setBatchProviderChoice((previous) => ({
+                        ...previous,
+                        [b._id]: e.target.value,
+                      }))}
+                      style={{ padding: '0.45rem', borderRadius: '4px', border: '1px solid #ccc', minWidth: '220px' }}
+                      aria-label="Choose provider for batch allocation"
+                    >
+                      <option value="">Choose transport provider</option>
+                      {eligibleProviders.map((p) => (
+                        <option key={p._id} value={p._id}>
+                          {p.name} ({formatNumber(p.capacityKg)} kg){p.phone ? ` · ${p.phone}` : ''}
+                        </option>
+                      ))}
+                    </select>
                     <button
                       type="button"
-                      disabled={isAssigning || providers.length === 0}
-                      onClick={() => handleAssignBatch(b)}
+                      disabled={isAssigning || eligibleProviders.length === 0 || remainingBatchKg <= 0}
+                      onClick={() => handleAllocateBatch(b)}
                       style={{
                         ...btn(),
-                        opacity: isAssigning || providers.length === 0 ? 0.6 : 1,
-                        cursor: isAssigning || providers.length === 0 ? 'not-allowed' : 'pointer',
+                        opacity: isAssigning || eligibleProviders.length === 0 || remainingBatchKg <= 0 ? 0.6 : 1,
+                        cursor: isAssigning || eligibleProviders.length === 0 || remainingBatchKg <= 0 ? 'not-allowed' : 'pointer',
                       }}
                     >
-                      {isAssigning ? t('lg_assigning') : t('lg_assign_to_batch')}
+                      {isAssigning ? 'Allocating…' : 'Allocate selected portions'}
                     </button>
+                    {eligibleProviders.length === 0 && (
+                      <span style={{ color: '#b71c1c', fontSize: '0.85rem' }}>
+                        No available provider serves both regions.
+                      </span>
+                    )}
                   </div>
                 )}
               </div>

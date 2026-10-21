@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const TransportProvider = require('../models/TransportProvider');
 const LogisticsRequest = require('../models/LogisticsRequest');
 const AggregationBatch = require('../models/AggregationBatch');
+const TransportAllocation = require('../models/TransportAllocation');
 const Notification = require('../models/Notification');
 const { ETHIOPIAN_PHONE_REGEX, normalizePhone } = require('../utils/phoneValidation');
 
@@ -9,28 +10,23 @@ const UNIT_TO_KG = { Quintal: 100, Kg: 1, Liter: 1 };
 const isValidId = (id) => mongoose.Types.ObjectId.isValid(id);
 
 // ---------------------------------------------------------------------------
-// Matching: rank available providers for a load between two regions.
-// A provider must be available, serve the pickup region, and have enough
-// capacity. Serving the destination region too ranks higher; among equals the
-// tightest capacity fit wins (don't send a heavy truck for a small load).
+// Matching: return available providers serving both regions
+// with sufficient capacity. Prefer the tightest capacity fit.
 // ---------------------------------------------------------------------------
 const findMatchingProviders = async (pickupRegion, destinationRegion, quantityKg) => {
   const candidates = await TransportProvider.find({
     isAvailable: true,
-    regionsServed: pickupRegion,
+    regionsServed: { $all: [pickupRegion, destinationRegion] },
     capacityKg: { $gte: quantityKg },
   });
 
   return candidates
-    .map((p) => {
-      const servesDestination = p.regionsServed.includes(destinationRegion);
-      return {
-        provider: p,
-        servesDestination,
-        spareCapacityKg: p.capacityKg - quantityKg,
-        score: (servesDestination ? 1000000 : 0) - (p.capacityKg - quantityKg),
-      };
-    })
+    .map((provider) => ({
+      provider,
+      servesDestination: true,
+      spareCapacityKg: provider.capacityKg - quantityKg,
+      score: -(provider.capacityKg - quantityKg),
+    }))
     .sort((a, b) => b.score - a.score);
 };
 
@@ -230,7 +226,38 @@ const getAllRequests = async (req, res) => {
       .populate('requester', 'fullName email phone role')
       .populate('assignedProvider', 'name phone vehicleType')
       .sort({ createdAt: -1 });
-    res.json(requests);
+
+    const requestIds = requests.map((request) => request._id);
+    const allocations = requestIds.length
+      ? await TransportAllocation.find({
+          'requestPortions.request': { $in: requestIds },
+        })
+          .populate('provider', 'name phone vehicleType capacityKg')
+          .lean()
+      : [];
+
+    const result = requests.map((request) => {
+      const item = request.toObject();
+
+      item.allocations = allocations
+        .map((allocation) => {
+          const portion = (allocation.requestPortions || []).find(
+            (entry) => String(entry.request) === String(request._id)
+          );
+
+          if (!portion) return null;
+
+          return {
+            ...allocation,
+            requestPortionQuantityKg: Number(portion.quantityKg || 0),
+          };
+        })
+        .filter(Boolean);
+
+      return item;
+    });
+
+    res.json(result);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -267,6 +294,15 @@ const assignProvider = async (req, res) => {
     const provider = await TransportProvider.findById(providerId);
     if (!provider) return res.status(404).json({ message: 'Provider not found.' });
     if (!provider.isAvailable) return res.status(400).json({ message: 'Provider is marked unavailable.' });
+    if (
+      !Array.isArray(provider.regionsServed) ||
+      !provider.regionsServed.includes(request.pickupRegion) ||
+      !provider.regionsServed.includes(request.destinationRegion)
+    ) {
+      return res.status(400).json({
+        message: 'Provider must serve both the pickup and destination regions.',
+      });
+    }
     if (provider.capacityKg < request.quantityKg) {
       return res.status(400).json({ message: 'Provider capacity is smaller than this load.' });
     }
@@ -282,26 +318,346 @@ const assignProvider = async (req, res) => {
   }
 };
 
+
+/**
+ * POST /api/logistics/:id/allocations
+ * Body: { providerId, quantityKg }
+ * Admin only. Reserves a portion of one request for one provider.
+ */
+const allocateRequest = async (req, res) => {
+  const { providerId } = req.body;
+  const quantityKg = Number(req.body.quantityKg);
+  const requestId = req.params.id;
+
+  const fail = (statusCode, message, details = {}) => {
+    const error = new Error(message);
+    error.statusCode = statusCode;
+    error.details = details;
+    throw error;
+  };
+
+  if (!isValidId(requestId) || !isValidId(providerId)) {
+    return res.status(400).json({
+      message: 'Valid request id and providerId are required.',
+    });
+  }
+
+  if (!Number.isFinite(quantityKg) || quantityKg <= 0) {
+    return res.status(400).json({
+      message: 'quantityKg must be a positive number.',
+    });
+  }
+
+  const session = await mongoose.startSession();
+  let allocationId;
+  let providerName;
+  let providerPhone;
+
+  try {
+    await session.withTransaction(async () => {
+      const request = await LogisticsRequest.findById(requestId)
+        .session(session);
+
+      if (!request) {
+        fail(404, 'Request not found.');
+      }
+
+      if (!['Pending', 'Partially Assigned'].includes(request.status)) {
+        fail(
+          400,
+          'Only Pending or Partially Assigned requests can receive allocations.'
+        );
+      }
+
+      if (request.batch) {
+        fail(
+          400,
+          'This request belongs to an aggregation batch. Use the batch allocations endpoint.'
+        );
+      }
+
+      const provider = await TransportProvider.findById(providerId)
+        .session(session);
+
+      if (!provider) {
+        fail(404, 'Provider not found.');
+      }
+
+      if (!provider.isAvailable) {
+        fail(400, 'Provider is marked unavailable.');
+      }
+
+      if (
+        !Array.isArray(provider.regionsServed) ||
+        !provider.regionsServed.includes(request.pickupRegion) ||
+        !provider.regionsServed.includes(request.destinationRegion)
+      ) {
+        fail(
+          400,
+          'Provider must serve both the pickup and destination regions.'
+        );
+      }
+
+      if (quantityKg > provider.capacityKg) {
+        fail(400, 'Allocation exceeds this provider capacity.', {
+          providerCapacityKg: provider.capacityKg,
+        });
+      }
+
+      const nextAllocated = {
+        $add: [
+          { $ifNull: ['$allocatedQuantityKg', 0] },
+          quantityKg,
+        ],
+      };
+
+      // Guard against over-allocation in the same atomic request update.
+      const result = await LogisticsRequest.updateOne(
+        {
+          _id: request._id,
+          status: { $in: ['Pending', 'Partially Assigned'] },
+          $expr: {
+            $lte: [nextAllocated, '$quantityKg'],
+          },
+        },
+        [
+          {
+            $set: {
+              allocatedQuantityKg: nextAllocated,
+              status: {
+                $cond: [
+                  { $gte: [nextAllocated, '$quantityKg'] },
+                  'Assigned',
+                  'Partially Assigned',
+                ],
+              },
+            },
+          },
+        ],
+        { session }
+      );
+
+      if (result.matchedCount !== 1) {
+        const latest = await LogisticsRequest.findById(requestId)
+          .session(session);
+
+        const allocated = latest
+          ? (latest.allocatedQuantityKg || 0)
+          : 0;
+
+        fail(
+          409,
+          'Insufficient remaining quantity, or the request changed during allocation.',
+          {
+            requestedQuantityKg: latest?.quantityKg,
+            allocatedQuantityKg: allocated,
+            remainingQuantityKg: latest
+              ? Math.max(0, latest.quantityKg - allocated)
+              : undefined,
+          }
+        );
+      }
+
+      const created = await TransportAllocation.create(
+        [{
+          provider: provider._id,
+          requestPortions: [{
+            request: request._id,
+            quantityKg,
+          }],
+          totalQuantityKg: quantityKg,
+          createdBy: req.user._id,
+        }],
+        { session }
+      );
+
+      allocationId = created[0]._id;
+      providerName = provider.name;
+      providerPhone = provider.phone;
+    });
+
+    // Notify only after the transaction commits successfully.
+    const [allocation, updatedRequest] = await Promise.all([
+      TransportAllocation.findById(allocationId)
+        .populate('provider', 'name phone vehicleType capacityKg'),
+      LogisticsRequest.findById(requestId),
+    ]);
+
+    if (!allocation || !updatedRequest) {
+      console.error('Allocation committed but follow-up read failed.');
+      return res.status(500).json({
+        message: 'Allocation was saved, but its details could not be retrieved. Refresh the request before retrying.',
+      });
+    }
+
+    const remainingQuantityKg = Math.max(
+      0,
+      updatedRequest.quantityKg - (updatedRequest.allocatedQuantityKg || 0)
+    );
+
+    try {
+      await notify(
+        updatedRequest.requester,
+        quantityKg + ' kg of your ' + updatedRequest.cropName +
+          ' load has been allocated to ' + providerName +
+          ' (' + providerPhone + '). Remaining unallocated quantity: ' +
+          remainingQuantityKg + ' kg.'
+      );
+    } catch (notificationError) {
+      console.error(
+        'Allocation notification failed:',
+        notificationError.message
+      );
+    }
+
+    return res.status(201).json({
+      allocation,
+      request: updatedRequest,
+      remainingQuantityKg,
+    });
+  } catch (error) {
+    console.error('Request allocation failed:', error.message);
+
+    return res.status(error.statusCode || 500).json({
+      message: error.statusCode
+        ? error.message
+        : 'Unable to allocate this request at the moment.',
+      ...(error.details || {}),
+    });
+  } finally {
+    await session.endSession();
+  }
+};
+
 // PATCH /api/logistics/:id/status  { status } (admin) — In Transit / Delivered.
 const updateRequestStatus = async (req, res) => {
+  return res.status(400).json({
+    message: 'Request status is derived from transport allocations. Update the transport allocation status instead.',
+  });
+};
+
+
+const updateAllocationStatus = async (req, res) => {
+  let session;
   try {
     const { status } = req.body;
+
     if (!['In Transit', 'Delivered'].includes(status)) {
-      return res.status(400).json({ message: 'status must be "In Transit" or "Delivered".' });
+      return res.status(400).json({
+        message: 'status must be "In Transit" or "Delivered".',
+      });
     }
-    if (!isValidId(req.params.id)) return res.status(400).json({ message: 'Invalid request id.' });
-    const request = await LogisticsRequest.findById(req.params.id);
-    if (!request) return res.status(404).json({ message: 'Request not found.' });
-    const allowed = { 'In Transit': ['Assigned'], Delivered: ['In Transit'] };
-    if (!allowed[status].includes(request.status)) {
-      return res.status(400).json({ message: `Cannot move a ${request.status} request to ${status}.` });
+
+    if (!isValidId(req.params.allocationId)) {
+      return res.status(400).json({ message: 'Invalid allocation id.' });
     }
-    request.status = status;
-    await request.save();
-    await notify(request.requester, `Your ${request.cropName} load is now: ${status}.`);
-    res.json(request);
+
+    session = await mongoose.startSession();
+    session.startTransaction();
+
+    const allocation = await TransportAllocation
+      .findById(req.params.allocationId)
+      .session(session);
+
+    if (!allocation) {
+      await session.abortTransaction();
+      return res.status(404).json({ message: 'Transport allocation not found.' });
+    }
+
+    const allowed = {
+      Assigned: ['In Transit'],
+      'In Transit': ['Delivered'],
+    };
+
+    if (!allowed[allocation.status]?.includes(status)) {
+      await session.abortTransaction();
+      return res.status(400).json({
+        message: 'Cannot move an allocation from ' +
+          allocation.status + ' to ' + status + '.',
+      });
+    }
+
+    allocation.status = status;
+    await allocation.save({ session });
+
+    const requestIds = [
+      ...new Set(allocation.requestPortions.map((portion) =>
+        String(portion.request)
+      )),
+    ];
+
+    for (const requestId of requestIds) {
+      const request = await LogisticsRequest.findById(requestId).session(session);
+      if (!request || request.status === 'Cancelled') continue;
+
+      const linked = await TransportAllocation.find({
+        'requestPortions.request': request._id,
+        status: { $ne: 'Cancelled' },
+      }).session(session);
+
+      const allocatedKg = Number(request.allocatedQuantityKg || 0);
+      const totalKg = Number(request.quantityKg || 0);
+
+      if (allocatedKg + 0.000001 < totalKg) {
+        request.status = allocatedKg > 0
+          ? 'Partially Assigned'
+          : request.batch ? 'Batched' : 'Pending';
+      } else if (linked.length > 0 &&
+          linked.every((item) => item.status === 'Delivered')) {
+        request.status = 'Delivered';
+      } else if (linked.some((item) => item.status === 'In Transit')) {
+        request.status = 'In Transit';
+      } else {
+        request.status = 'Assigned';
+      }
+
+      await request.save({ session });
+    }
+
+    if (allocation.batch) {
+      const batch = await AggregationBatch
+        .findById(allocation.batch)
+        .session(session);
+
+      if (batch && batch.status !== 'Cancelled') {
+        const batchAllocations = await TransportAllocation.find({
+          batch: batch._id,
+          status: { $ne: 'Cancelled' },
+        }).session(session);
+
+        const allocatedKg = Number(batch.allocatedQuantityKg || 0);
+        const totalKg = Number(batch.totalQuantityKg || 0);
+
+        if (allocatedKg + 0.000001 < totalKg) {
+          batch.status = allocatedKg > 0 ? 'Partially Assigned' : 'Open';
+        } else if (batchAllocations.length > 0 &&
+            batchAllocations.every((item) => item.status === 'Delivered')) {
+          batch.status = 'Delivered';
+        } else if (batchAllocations.some((item) => item.status === 'In Transit')) {
+          batch.status = 'In Transit';
+        } else {
+          batch.status = 'Assigned';
+        }
+
+        await batch.save({ session });
+      }
+    }
+
+    await session.commitTransaction();
+
+    const updated = await TransportAllocation.findById(allocation._id)
+      .populate('provider', 'name phone vehicleType capacityKg')
+      .populate('batch')
+      .populate('requestPortions.request', 'cropName quantityKg allocatedQuantityKg status');
+
+    return res.json(updated);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    if (session && session.inTransaction()) {
+      await session.abortTransaction();
+    }
+    return res.status(500).json({ message: error.message });
+  } finally {
+    if (session) await session.endSession();
   }
 };
 
@@ -349,62 +705,120 @@ const getAggregationSuggestions = async (req, res) => {
 
 // POST /api/logistics/aggregation/batches  { requestIds, providerId? } (admin)
 const createBatch = async (req, res) => {
+  const session = await mongoose.startSession();
+  let createdBatch;
+  let requestsForNotification = [];
+
   try {
     const { requestIds, providerId } = req.body;
-    if (!Array.isArray(requestIds) || requestIds.length < 2 || !requestIds.every(isValidId)) {
-      return res.status(400).json({ message: 'Select at least two valid requests to aggregate.' });
-    }
 
-    const requests = await LogisticsRequest.find({ _id: { $in: requestIds } });
-    if (requests.length !== requestIds.length) {
-      return res.status(404).json({ message: 'One or more requests were not found.' });
-    }
-    if (requests.some((r) => r.status !== 'Pending')) {
-      return res.status(400).json({ message: 'Only Pending requests can be aggregated.' });
-    }
-    const { pickupRegion, destinationRegion } = requests[0];
-    if (requests.some((r) => r.pickupRegion !== pickupRegion || r.destinationRegion !== destinationRegion)) {
-      return res.status(400).json({ message: 'All requests in a batch must share the same pickup and destination region.' });
-    }
-    const totalQuantityKg = requests.reduce((sum, r) => sum + r.quantityKg, 0);
-
-    let provider = null;
     if (providerId) {
-      if (!isValidId(providerId)) return res.status(400).json({ message: 'Invalid providerId.' });
-      provider = await TransportProvider.findById(providerId);
-      if (!provider) return res.status(404).json({ message: 'Provider not found.' });
-      if (!provider.isAvailable) return res.status(400).json({ message: 'Provider is marked unavailable.' });
-      if (provider.capacityKg < totalQuantityKg) {
-        return res.status(400).json({ message: `Provider capacity (${provider.capacityKg} kg) is below the combined load (${totalQuantityKg} kg).` });
-      }
+      return res.status(400).json({
+        message: 'Create the batch first, then allocate portions to providers.',
+      });
     }
 
-    const batch = await AggregationBatch.create({
-      pickupRegion,
-      destinationRegion,
-      requests: requests.map((r) => r._id),
-      totalQuantityKg,
-      provider: provider ? provider._id : undefined,
-      status: provider ? 'Assigned' : 'Open',
-      createdBy: req.user._id,
+    if (
+      !Array.isArray(requestIds) ||
+      requestIds.length < 2 ||
+      !requestIds.every(isValidId) ||
+      new Set(requestIds.map(String)).size !== requestIds.length
+    ) {
+      return res.status(400).json({
+        message: 'Select at least two distinct valid requests to aggregate.',
+      });
+    }
+
+    await session.withTransaction(async () => {
+      const requests = await LogisticsRequest.find({
+        _id: { $in: requestIds },
+      }).session(session);
+
+      if (requests.length !== requestIds.length) {
+        const error = new Error('One or more requests were not found.');
+        error.statusCode = 404;
+        throw error;
+      }
+
+      if (requests.some((r) => r.status !== 'Pending' || r.batch)) {
+        const error = new Error('Only unbatched Pending requests can be aggregated.');
+        error.statusCode = 400;
+        throw error;
+      }
+
+      const { pickupRegion, destinationRegion } = requests[0];
+
+      if (requests.some(
+        (r) =>
+          r.pickupRegion !== pickupRegion ||
+          r.destinationRegion !== destinationRegion
+      )) {
+        const error = new Error(
+          'All requests in a batch must share the same pickup and destination region.'
+        );
+        error.statusCode = 400;
+        throw error;
+      }
+
+      const totalQuantityKg = requests.reduce(
+        (sum, r) => sum + Number(r.quantityKg),
+        0
+      );
+
+      const batch = new AggregationBatch({
+        pickupRegion,
+        destinationRegion,
+        requests: requests.map((r) => r._id),
+        totalQuantityKg,
+        allocatedQuantityKg: 0,
+        status: 'Open',
+        createdBy: req.user._id,
+      });
+
+      await batch.save({ session });
+
+      const update = await LogisticsRequest.updateMany(
+        {
+          _id: { $in: requestIds },
+          status: 'Pending',
+          batch: { $exists: false },
+        },
+        { $set: { status: 'Batched', batch: batch._id } },
+        { session }
+      );
+
+      if (update.modifiedCount !== requestIds.length) {
+        const error = new Error(
+          'One or more requests changed while the batch was being created. Please reload and try again.'
+        );
+        error.statusCode = 409;
+        throw error;
+      }
+
+      createdBatch = batch;
+      requestsForNotification = requests;
     });
 
-    await LogisticsRequest.updateMany(
-      { _id: { $in: requestIds } },
-      provider
-        ? { status: 'Assigned', batch: batch._id, assignedProvider: provider._id }
-        : { status: 'Batched', batch: batch._id }
-    );
-    await Promise.all(requests.map((r) => notify(
-      r.requester,
-      provider
-        ? `Your ${r.cropName} load was combined with others and assigned to ${provider.name} (${provider.phone}).`
-        : `Your ${r.cropName} load was combined with other farmers' loads. A transport provider will be assigned soon.`
-    )));
+    await Promise.all(requestsForNotification.map((r) =>
+      notify(
+        r.requester,
+        `Your ${r.cropName} load was grouped into a batch. A transport provider will be allocated when capacity is available.`
+      )
+    ));
 
-    res.status(201).json(await batch.populate('provider', 'name phone vehicleType'));
+    return res.status(201).json({
+      message: 'Open batch created successfully. Allocate it to providers by portions.',
+      batch: createdBatch,
+    });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('Create batch error:', error);
+    return res.status(error.statusCode || 500).json({
+      message: error.statusCode
+        ? error.message
+        : 'Unable to create the batch. Please try again.',
+    });
+  } finally {
+    await session.endSession();
   }
 };
 
@@ -413,9 +827,40 @@ const getBatches = async (req, res) => {
   try {
     const batches = await AggregationBatch.find()
       .populate('provider', 'name phone vehicleType capacityKg')
-      .populate({ path: 'requests', select: 'cropName quantity unit quantityKg status requester', populate: { path: 'requester', select: 'fullName phone' } })
+      .populate({
+        path: 'requests',
+        select: 'cropName quantity unit quantityKg allocatedQuantityKg status requester',
+        populate: { path: 'requester', select: 'fullName phone' },
+      })
       .sort({ createdAt: -1 });
-    res.json(batches);
+
+    const batchIds = batches.map((batch) => batch._id);
+    const allocations = batchIds.length
+      ? await TransportAllocation.find({ batch: { $in: batchIds } })
+          .populate('provider', 'name phone vehicleType capacityKg')
+          .populate({
+            path: 'requestPortions.request',
+            select: 'cropName quantityKg allocatedQuantityKg status requester',
+            populate: { path: 'requester', select: 'fullName phone' },
+          })
+          .lean()
+      : [];
+
+    const allocationsByBatch = new Map();
+
+    for (const allocation of allocations) {
+      const key = String(allocation.batch);
+      if (!allocationsByBatch.has(key)) allocationsByBatch.set(key, []);
+      allocationsByBatch.get(key).push(allocation);
+    }
+
+    res.json(
+      batches.map((batch) => {
+        const item = batch.toObject();
+        item.allocations = allocationsByBatch.get(String(batch._id)) || [];
+        return item;
+      })
+    );
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -423,40 +868,280 @@ const getBatches = async (req, res) => {
 
 // PATCH /api/logistics/aggregation/batches/:id/assign  { providerId } (admin)
 const assignBatchProvider = async (req, res) => {
-  try {
-    const { providerId } = req.body;
-    if (!isValidId(req.params.id) || !isValidId(providerId)) {
-      return res.status(400).json({ message: 'Valid batch id and providerId are required.' });
-    }
-    const batch = await AggregationBatch.findById(req.params.id).populate('requests');
-    if (!batch) return res.status(404).json({ message: 'Batch not found.' });
-    if (batch.status !== 'Open') return res.status(400).json({ message: `Batch is already ${batch.status}.` });
-
-    const provider = await TransportProvider.findById(providerId);
-    if (!provider) return res.status(404).json({ message: 'Provider not found.' });
-    if (!provider.isAvailable) return res.status(400).json({ message: 'Provider is marked unavailable.' });
-    if (provider.capacityKg < batch.totalQuantityKg) {
-      return res.status(400).json({ message: `Provider capacity (${provider.capacityKg} kg) is below the combined load (${batch.totalQuantityKg} kg).` });
-    }
-
-    batch.provider = provider._id;
-    batch.status = 'Assigned';
-    await batch.save();
-    await LogisticsRequest.updateMany(
-      { batch: batch._id, status: 'Batched' },
-      { status: 'Assigned', assignedProvider: provider._id }
-    );
-    await Promise.all(batch.requests.map((r) => notify(
-      r.requester,
-      `Transport assigned for your ${r.cropName} load: ${provider.name} (${provider.phone}).`
-    )));
-
-    res.json(await batch.populate('provider', 'name phone vehicleType capacityKg'));
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
+  return res.status(400).json({
+    message: 'Whole-batch assignment is disabled. Use the batch allocations endpoint and specify request portions in kg.',
+  });
 };
 
+const allocateBatch = async (req, res) => {
+  const batchId = req.params.id;
+  const { providerId, portions } = req.body;
+
+  const fail = (statusCode, message, details = {}) => {
+    const error = new Error(message);
+    error.statusCode = statusCode;
+    error.details = details;
+    throw error;
+  };
+
+  if (!isValidId(batchId) || !isValidId(providerId)) {
+    return res.status(400).json({
+      message: 'Valid batch id and providerId are required.',
+    });
+  }
+
+  if (!Array.isArray(portions) || portions.length === 0) {
+    return res.status(400).json({
+      message: 'Provide at least one request portion.',
+    });
+  }
+
+  const normalized = [];
+  const seen = new Set();
+
+  for (const portion of portions) {
+    if (
+      !portion ||
+      !isValidId(portion.requestId) ||
+      !Number.isFinite(Number(portion.quantityKg)) ||
+      Number(portion.quantityKg) <= 0
+    ) {
+      return res.status(400).json({
+        message: 'Each portion needs a valid requestId and positive quantityKg.',
+      });
+    }
+
+    const requestId = String(portion.requestId);
+
+    if (seen.has(requestId)) {
+      return res.status(400).json({
+        message: 'Each request may appear only once per allocation.',
+      });
+    }
+
+    seen.add(requestId);
+    normalized.push({
+      requestId,
+      quantityKg: Number(portion.quantityKg),
+    });
+  }
+
+  const totalQuantityKg = normalized.reduce(
+    (sum, portion) => sum + portion.quantityKg,
+    0
+  );
+
+  const session = await mongoose.startSession();
+  let allocationId;
+  let committedPortions = [];
+
+  try {
+    await session.withTransaction(async () => {
+      const batch = await AggregationBatch.findById(batchId)
+        .session(session);
+
+      if (!batch) fail(404, 'Batch not found.');
+
+      if (!['Open', 'Partially Assigned'].includes(batch.status)) {
+        fail(400, `This batch cannot receive allocations while ${batch.status}.`);
+      }
+
+      const provider = await TransportProvider.findById(providerId)
+        .session(session);
+
+      if (!provider) fail(404, 'Provider not found.');
+      if (!provider.isAvailable) {
+        fail(400, 'Provider is marked unavailable.');
+      }
+
+      if (
+        !Array.isArray(provider.regionsServed) ||
+        !provider.regionsServed.includes(batch.pickupRegion) ||
+        !provider.regionsServed.includes(batch.destinationRegion)
+      ) {
+        fail(400, 'Provider must serve both the pickup and destination regions.');
+      }
+
+      if (totalQuantityKg > provider.capacityKg) {
+        fail(400, 'Allocation exceeds this provider capacity.', {
+          providerCapacityKg: provider.capacityKg,
+          requestedAllocationKg: totalQuantityKg,
+        });
+      }
+
+      const batchRequestIds = new Set(
+        batch.requests.map((id) => String(id))
+      );
+
+      for (const portion of normalized) {
+        if (!batchRequestIds.has(portion.requestId)) {
+          fail(400, 'Every request portion must belong to this batch.', {
+            requestId: portion.requestId,
+          });
+        }
+
+        const request = await LogisticsRequest.findById(portion.requestId)
+          .session(session);
+
+        if (!request) {
+          fail(404, 'A request belonging to the batch was not found.', {
+            requestId: portion.requestId,
+          });
+        }
+
+        if (!['Batched', 'Partially Assigned'].includes(request.status)) {
+          fail(400, 'Only Batched or Partially Assigned requests can receive batch allocations.', {
+            requestId: portion.requestId,
+            status: request.status,
+          });
+        }
+
+        const nextAllocated = {
+          $add: [
+            { $ifNull: ['$allocatedQuantityKg', 0] },
+            portion.quantityKg,
+          ],
+        };
+
+        const updated = await LogisticsRequest.updateOne(
+          {
+            _id: request._id,
+            status: { $in: ['Batched', 'Partially Assigned'] },
+            $expr: { $lte: [nextAllocated, '$quantityKg'] },
+          },
+          [
+            {
+              $set: {
+                allocatedQuantityKg: nextAllocated,
+                status: {
+                  $cond: [
+                    { $gte: [nextAllocated, '$quantityKg'] },
+                    'Assigned',
+                    'Partially Assigned',
+                  ],
+                },
+              },
+            },
+          ],
+          { session }
+        );
+
+        if (updated.matchedCount !== 1) {
+          fail(409, 'A request changed during allocation. Refresh and try again.', {
+            requestId: portion.requestId,
+          });
+        }
+      }
+
+      const updatedBatch = await AggregationBatch.updateOne(
+        {
+          _id: batch._id,
+          status: { $in: ['Open', 'Partially Assigned'] },
+          $expr: {
+            $lte: [
+              {
+                $add: [
+                  { $ifNull: ['$allocatedQuantityKg', 0] },
+                  totalQuantityKg,
+                ],
+              },
+              '$totalQuantityKg',
+            ],
+          },
+        },
+        [
+          {
+            $set: {
+              allocatedQuantityKg: {
+                $add: [
+                  { $ifNull: ['$allocatedQuantityKg', 0] },
+                  totalQuantityKg,
+                ],
+              },
+              status: {
+                $cond: [
+                  {
+                    $gte: [
+                      {
+                        $add: [
+                          { $ifNull: ['$allocatedQuantityKg', 0] },
+                          totalQuantityKg,
+                        ],
+                      },
+                      '$totalQuantityKg',
+                    ],
+                  },
+                  'Assigned',
+                  'Partially Assigned',
+                ],
+              },
+            },
+          },
+        ],
+        { session }
+      );
+
+      if (updatedBatch.matchedCount !== 1) {
+        fail(
+          409,
+          'Allocation exceeds the batch remaining quantity or the batch changed. Refresh and try again.'
+        );
+      }
+
+      const allocation = await TransportAllocation.create(
+        [
+          {
+            provider: provider._id,
+            batch: batch._id,
+            requestPortions: normalized.map((portion) => ({
+              request: portion.requestId,
+              quantityKg: portion.quantityKg,
+            })),
+            totalQuantityKg,
+            createdBy: req.user?._id,
+          },
+        ],
+        { session }
+      );
+
+      allocationId = allocation[0]._id;
+      committedPortions = normalized;
+    });
+
+    for (const portion of committedPortions) {
+      const request = await LogisticsRequest.findById(portion.requestId)
+        .select('requester')
+        .lean();
+
+      const recipientId = request?.requester;
+
+      if (recipientId) {
+        await notify(
+          recipientId,
+          `A transport provider has been assigned ${portion.quantityKg} kg of your batch request.`
+        );
+      }
+    }
+
+    return res.status(201).json({
+      message: 'Batch allocation created successfully.',
+      allocationId,
+      totalQuantityKg,
+      portions: committedPortions,
+    });
+  } catch (error) {
+    console.error('Batch allocation error:', error);
+
+    return res.status(error.statusCode || 500).json({
+      message: error.statusCode
+        ? error.message
+        : 'Unable to allocate this batch. Please try again.',
+      ...(error.details ? { details: error.details } : {}),
+    });
+  } finally {
+    await session.endSession();
+  }
+};
 
 // POST /api/transport-providers/seed (admin) — create a few demo providers if none exist
 const seedProviders = async (req, res) => {
@@ -510,7 +1195,8 @@ const seedProviders = async (req, res) => {
 module.exports = {
   listProviders, createProvider, updateProvider, deleteProvider, seedProviders,
   createRequest, getMyRequests, cancelRequest, getAllRequests,
-  getRequestMatches, assignProvider, updateRequestStatus,
+  getRequestMatches, assignProvider, allocateRequest, updateRequestStatus,
   getAggregationSuggestions, createBatch, getBatches, assignBatchProvider,
+  allocateBatch, updateAllocationStatus,
   findMatchingProviders,
 };
