@@ -9,6 +9,88 @@ const { ETHIOPIAN_PHONE_REGEX, normalizePhone } = require('../utils/phoneValidat
 const UNIT_TO_KG = { Quintal: 100, Kg: 1, Liter: 1 };
 const isValidId = (id) => mongoose.Types.ObjectId.isValid(id);
 
+const ACTIVE_ALLOCATION_STATUSES = ['Assigned', 'In Transit'];
+
+// Count active allocations and legacy assignments that have no allocation
+// record. The latter prevents older direct assignments from freeing capacity.
+const getProviderActiveLoadKg = async (providerId, session) => {
+  const allocationQuery = TransportAllocation.find({
+    provider: providerId,
+    status: { $in: ACTIVE_ALLOCATION_STATUSES },
+  }).select('totalQuantityKg');
+
+  if (session) allocationQuery.session(session);
+  const allocations = await allocationQuery;
+  let activeLoadKg = allocations.reduce(
+    (sum, allocation) => sum + Number(allocation.totalQuantityKg || 0),
+    0
+  );
+
+  const legacyQuery = LogisticsRequest.find({
+    assignedProvider: providerId,
+    status: { $in: ACTIVE_ALLOCATION_STATUSES },
+  }).select('_id quantityKg');
+
+  if (session) legacyQuery.session(session);
+  const legacyRequests = await legacyQuery;
+
+  if (legacyRequests.length) {
+    const requestIds = legacyRequests.map((request) => request._id);
+    // Only active allocations for this same provider cover legacy requests.
+    // Delivered/cancelled allocations and allocations for other providers
+    // must not hide a legacy assignment from this provider's active load.
+    const linkedQuery = TransportAllocation.find({
+      provider: providerId,
+      status: { $in: ACTIVE_ALLOCATION_STATUSES },
+      'requestPortions.request': { $in: requestIds },
+    }).select('requestPortions.request requestPortions.quantityKg');
+
+    if (session) linkedQuery.session(session);
+    const linkedAllocations = await linkedQuery;
+    const linkedQuantityByRequest = new Map();
+
+    for (const allocation of linkedAllocations) {
+      for (const portion of allocation.requestPortions || []) {
+        const key = String(portion.request);
+        const quantityKg = Number(portion.quantityKg || 0);
+        linkedQuantityByRequest.set(
+          key,
+          (linkedQuantityByRequest.get(key) || 0) + quantityKg
+        );
+      }
+    }
+
+    // Active allocation totals are already counted above. Add only the
+    // uncovered remainder of each legacy assignment to avoid double-counting.
+    for (const request of legacyRequests) {
+      const linkedQuantityKg =
+        linkedQuantityByRequest.get(String(request._id)) || 0;
+      const uncoveredKg = Math.max(
+        0,
+        Number(request.quantityKg || 0) - linkedQuantityKg
+      );
+      activeLoadKg += uncoveredKg;
+    }
+  }
+
+  return activeLoadKg;
+};
+
+const lockProviderCapacity = async (providerId, session, fail) => {
+  // Concurrent transactions touching the same provider must conflict/retry
+  // before they can both reserve the same remaining capacity.
+  const result = await TransportProvider.updateOne(
+    { _id: providerId },
+    { $inc: { capacityRevision: 1 } },
+    { session }
+  );
+
+  if (result.matchedCount !== 1) {
+    fail(409, 'Provider capacity changed. Refresh and try again.');
+  }
+};
+
+
 // ---------------------------------------------------------------------------
 // Matching: return available providers serving both regions
 // with sufficient capacity. Prefer the tightest capacity fit.
@@ -17,17 +99,29 @@ const findMatchingProviders = async (pickupRegion, destinationRegion, quantityKg
   const candidates = await TransportProvider.find({
     isAvailable: true,
     regionsServed: { $all: [pickupRegion, destinationRegion] },
-    capacityKg: { $gte: quantityKg },
   });
 
-  return candidates
-    .map((provider) => ({
+  const matches = [];
+  for (const provider of candidates) {
+    const activeLoadKg = await getProviderActiveLoadKg(provider._id);
+    const remainingCapacityKg = Math.max(
+      0,
+      Number(provider.capacityKg) - activeLoadKg
+    );
+
+    if (remainingCapacityKg < Number(quantityKg)) continue;
+
+    matches.push({
       provider,
       servesDestination: true,
-      spareCapacityKg: provider.capacityKg - quantityKg,
-      score: -(provider.capacityKg - quantityKg),
-    }))
-    .sort((a, b) => b.score - a.score);
+      activeLoadKg,
+      remainingCapacityKg,
+      spareCapacityKg: remainingCapacityKg - Number(quantityKg),
+      score: -(remainingCapacityKg - Number(quantityKg)),
+    });
+  }
+
+  return matches.sort((a, b) => b.score - a.score);
 };
 
 const notify = async (userId, message) => {
@@ -47,8 +141,21 @@ const listProviders = async (req, res) => {
     if (req.query.region) filter.regionsServed = req.query.region;
     if (req.query.vehicleType) filter.vehicleType = req.query.vehicleType;
     if (req.query.available === 'true') filter.isAvailable = true;
+
     const providers = await TransportProvider.find(filter).sort({ name: 1 });
-    res.json(providers);
+    const results = await Promise.all(providers.map(async (provider) => {
+      const activeLoadKg = await getProviderActiveLoadKg(provider._id);
+      return {
+        ...provider.toObject(),
+        activeLoadKg,
+        remainingCapacityKg: Math.max(
+          0,
+          Number(provider.capacityKg) - activeLoadKg
+        ),
+      };
+    }));
+
+    res.json(results);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -282,39 +389,35 @@ const getRequestMatches = async (req, res) => {
 // PATCH /api/logistics/:id/assign  { providerId } (admin) — single request.
 const assignProvider = async (req, res) => {
   try {
-    const { providerId } = req.body;
-    if (!isValidId(req.params.id) || !isValidId(providerId)) {
-      return res.status(400).json({ message: 'Valid request id and providerId are required.' });
-    }
-    const request = await LogisticsRequest.findById(req.params.id);
-    if (!request) return res.status(404).json({ message: 'Request not found.' });
-    if (request.status !== 'Pending') {
-      return res.status(400).json({ message: `Only Pending requests can be assigned (this one is ${request.status}).` });
-    }
-    const provider = await TransportProvider.findById(providerId);
-    if (!provider) return res.status(404).json({ message: 'Provider not found.' });
-    if (!provider.isAvailable) return res.status(400).json({ message: 'Provider is marked unavailable.' });
-    if (
-      !Array.isArray(provider.regionsServed) ||
-      !provider.regionsServed.includes(request.pickupRegion) ||
-      !provider.regionsServed.includes(request.destinationRegion)
-    ) {
+    if (!isValidId(req.params.id) || !isValidId(req.body.providerId)) {
       return res.status(400).json({
-        message: 'Provider must serve both the pickup and destination regions.',
+        message: 'Valid request id and providerId are required.',
       });
     }
-    if (provider.capacityKg < request.quantityKg) {
-      return res.status(400).json({ message: 'Provider capacity is smaller than this load.' });
+
+    const request = await LogisticsRequest.findById(req.params.id);
+    if (!request) {
+      return res.status(404).json({ message: 'Request not found.' });
     }
 
-    request.assignedProvider = provider._id;
-    request.status = 'Assigned';
-    await request.save();
-    await notify(request.requester, `Transport assigned for your ${request.cropName} load: ${provider.name} (${provider.phone}).`);
-    await request.populate('assignedProvider', 'name phone vehicleType');
-    res.json(request);
+    if (request.batch) {
+      return res.status(400).json({
+        message: 'This request belongs to a batch. Use the batch allocations endpoint.',
+      });
+    }
+
+    const remainingQuantityKg = Math.max(
+      0,
+      Number(request.quantityKg || 0) - Number(request.allocatedQuantityKg || 0)
+    );
+
+    return allocateRequest({
+      params: req.params,
+      body: { ...req.body, quantityKg: remainingQuantityKg },
+      user: req.user,
+    }, res);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return res.status(500).json({ message: error.message });
   }
 };
 
@@ -398,9 +501,20 @@ const allocateRequest = async (req, res) => {
         );
       }
 
-      if (quantityKg > provider.capacityKg) {
-        fail(400, 'Allocation exceeds this provider capacity.', {
+      await lockProviderCapacity(provider._id, session, fail);
+
+      const activeLoadKg = await getProviderActiveLoadKg(provider._id, session);
+      const remainingCapacityKg = Math.max(
+        0,
+        Number(provider.capacityKg) - activeLoadKg
+      );
+
+      if (quantityKg > remainingCapacityKg) {
+        fail(400, 'Allocation exceeds this provider remaining capacity.', {
           providerCapacityKg: provider.capacityKg,
+          activeLoadKg,
+          remainingCapacityKg,
+          requestedAllocationKg: quantityKg,
         });
       }
 
@@ -962,9 +1076,19 @@ const allocateBatch = async (req, res) => {
         fail(400, 'Provider must serve both the pickup and destination regions.');
       }
 
-      if (totalQuantityKg > provider.capacityKg) {
-        fail(400, 'Allocation exceeds this provider capacity.', {
+      await lockProviderCapacity(provider._id, session, fail);
+
+      const activeLoadKg = await getProviderActiveLoadKg(provider._id, session);
+      const remainingCapacityKg = Math.max(
+        0,
+        Number(provider.capacityKg) - activeLoadKg
+      );
+
+      if (totalQuantityKg > remainingCapacityKg) {
+        fail(400, 'Allocation exceeds this provider remaining capacity.', {
           providerCapacityKg: provider.capacityKg,
+          activeLoadKg,
+          remainingCapacityKg,
           requestedAllocationKg: totalQuantityKg,
         });
       }

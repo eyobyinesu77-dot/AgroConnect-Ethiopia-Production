@@ -10,6 +10,8 @@ const transportProviderSchema = new mongoose.Schema({
   vehicleType: { type: String, enum: VEHICLE_TYPES, required: true },
   // Max load in kilograms (1 quintal = 100 kg).
   capacityKg: { type: Number, required: true, min: 1 },
+  // Incremented transactionally to serialize capacity reservations.
+  capacityRevision: { type: Number, default: 0 },
   // Regions this provider operates in (matched against pickup/destination regions).
   regionsServed: [{ type: String, trim: true }],
   // Indicative rate; optional. ETB per quintal per km is easy for farmers to compare.

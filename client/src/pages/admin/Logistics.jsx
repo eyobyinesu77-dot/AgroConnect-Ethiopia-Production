@@ -62,11 +62,14 @@ export default function AdminLogistics() {
     }
   };
 
-  // Filter providers against the requested portion, not the entire request.
+  // Use capacity remaining after active allocations, not rated capacity alone.
+  const providerRemainingKg = (p) =>
+    Math.max(0, Number(p.remainingCapacityKg ?? p.capacityKg) || 0);
+
   const providersForRequest = (r, quantityKg) => {
     const eligible = providers.filter((p) =>
       p.isAvailable !== false &&
-      Number(p.capacityKg) >= quantityKg &&
+      providerRemainingKg(p) >= quantityKg &&
       Array.isArray(p.regionsServed) &&
       p.regionsServed.includes(r.pickupRegion) &&
       p.regionsServed.includes(r.destinationRegion)
@@ -77,6 +80,7 @@ export default function AdminLogistics() {
   const providersForBatch = (b) => {
     const eligible = providers.filter((p) =>
       p.isAvailable !== false &&
+      providerRemainingKg(p) > 0 &&
       Array.isArray(p.regionsServed) &&
       p.regionsServed.includes(b.pickupRegion) &&
       p.regionsServed.includes(b.destinationRegion)
@@ -128,8 +132,8 @@ export default function AdminLogistics() {
     const total = portions.reduce((sum, p) => sum + p.quantityKg, 0);
     const provider = providers.find((p) => p._id === providerId);
 
-    if (provider && total > Number(provider.capacityKg)) {
-      toast.error(`Allocation total exceeds provider capacity of ${provider.capacityKg} kg.`);
+    if (provider && total > providerRemainingKg(provider)) {
+      toast.error(`Allocation total exceeds provider remaining capacity of ${providerRemainingKg(provider)} kg.`);
       return;
     }
 
@@ -155,8 +159,8 @@ export default function AdminLogistics() {
       toast.error(`Enter a positive allocation no greater than ${remainingKg} kg remaining.`);
       return;
     }
-    if (!provider || quantityKg > Number(provider.capacityKg)) {
-      toast.error("Allocation must not exceed the selected provider's capacity.");
+    if (!provider || quantityKg > providerRemainingKg(provider)) {
+      toast.error(`Allocation must not exceed the selected provider's remaining capacity of ${provider ? providerRemainingKg(provider) : 0} kg.`);
       return;
     }
 
@@ -196,7 +200,7 @@ export default function AdminLogistics() {
         )}
         {options.map((p) => (
           <option key={p._id} value={p._id}>
-            {p.name} ({formatNumber(p.capacityKg)} {t('unit_kg')})
+            {p.name} ({formatNumber(providerRemainingKg(p))} kg remaining)
             {p.phone ? ` · ${p.phone}` : ''}
           </option>
         ))}
@@ -608,7 +612,7 @@ export default function AdminLogistics() {
                       <option value="">Choose transport provider</option>
                       {eligibleProviders.map((p) => (
                         <option key={p._id} value={p._id}>
-                          {p.name} ({formatNumber(p.capacityKg)} kg){p.phone ? ` · ${p.phone}` : ''}
+                          {p.name} ({formatNumber(providerRemainingKg(p))} kg remaining){p.phone ? ` · ${p.phone}` : ''}
                         </option>
                       ))}
                     </select>
