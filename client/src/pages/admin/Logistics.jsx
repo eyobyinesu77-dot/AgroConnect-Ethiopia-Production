@@ -187,25 +187,25 @@ export default function AdminLogistics() {
         onChange={(e) => {
           const v = e.target.value;
           if (v === '__none__') return;
+          if (v && !options.some((p) => p._id === v)) return;
           setChoice({ ...choice, [id]: v });
         }}
         style={{ padding: '0.4rem', borderRadius: '4px', border: '1px solid #ccc', minWidth: '220px' }}
         aria-label={t('lg_choose_provider')}
       >
         <option value="">{t('lg_choose_provider')}</option>
-        {options.length === 0 && (
-          <option value="__none__" disabled>
-            {t('lg_no_providers')}
-          </option>
-        )}
-        {options.map((p) => (
-          <option key={p._id} value={p._id}>
-            {p.name} ({formatNumber(providerRemainingKg(p))} kg remaining)
-            {p.phone ? ` · ${p.phone}` : ''}
-          </option>
-        ))}
+        {providers.map((p) => {
+          const eligible = options.some((candidate) => candidate._id === p._id);
+          return (
+            <option key={p._id} value={p._id} disabled={!eligible}>
+              {p.name} ({formatNumber(providerRemainingKg(p))} kg remaining)
+              {p.phone ? ` · ${p.phone}` : ''}
+              {!eligible ? ' · Not eligible (region/capacity)' : ''}
+            </option>
+          );
+        })}
       </select>
-      {options.length === 0 && (
+      {providers.length === 0 && (
         <p style={{ margin: 0, fontSize: '0.8rem', color: '#c62828' }}>
           {t('lg_no_providers')}{' '}
           <a href="/admin/transport-providers" style={{ color: '#1565c0', textDecoration: 'underline' }}>
@@ -213,8 +213,10 @@ export default function AdminLogistics() {
           </a>
         </p>
       )}
-      {options.length > 0 && !matched && !underCapacityOnly && (
-        <span style={{ fontSize: '0.75rem', color: '#e65100' }}>{t('lg_no_exact_match')}</span>
+      {providers.length > 0 && !matched && !underCapacityOnly && (
+        <span style={{ fontSize: '0.75rem', color: '#e65100' }}>
+          No provider matches this request's regions and capacity.
+        </span>
       )}
       {underCapacityOnly && (
         <span style={{ fontSize: '0.75rem', color: '#c62828' }}>
@@ -287,7 +289,12 @@ export default function AdminLogistics() {
           {requests.map((r) => {
             const allocatedKg = Number(r.allocatedQuantityKg || 0);
             const remainingKg = Math.max(0, Number(r.quantityKg || 0) - allocatedKg);
-            const portionKg = Number(requestPortions[r._id] || remainingKg);
+            const rawPortionKg = requestPortions[r._id] ?? String(remainingKg);
+            const portionKg = rawPortionKg.trim() === '' ? NaN : Number(rawPortionKg);
+            const validPortionKg =
+              Number.isFinite(portionKg) &&
+              portionKg > 0 &&
+              portionKg <= remainingKg;
             const { list: fits, matched, underCapacityOnly } = providersForRequest(r, portionKg);
             const isAssigning = assigning === r._id;
             return (
@@ -337,12 +344,12 @@ export default function AdminLogistics() {
                       {renderProviderSelect(r._id, fits, matched, underCapacityOnly)}
                       <button
                         type="button"
-                        disabled={isAssigning || providers.length === 0}
+                        disabled={isAssigning || providers.length === 0 || !validPortionKg || !choice[r._id]}
                         onClick={() => handleAssignRequest(r)}
                         style={{
                           ...btn(),
-                          opacity: isAssigning || providers.length === 0 ? 0.6 : 1,
-                          cursor: isAssigning || providers.length === 0 ? 'not-allowed' : 'pointer',
+                          opacity: isAssigning || providers.length === 0 || !validPortionKg || !choice[r._id] ? 0.6 : 1,
+                          cursor: isAssigning || providers.length === 0 || !validPortionKg || !choice[r._id] ? 'not-allowed' : 'pointer',
                         }}
                       >
                         {isAssigning ? t('lg_assigning') : t('lg_assign')}
@@ -610,11 +617,14 @@ export default function AdminLogistics() {
                       aria-label="Choose provider for batch allocation"
                     >
                       <option value="">Choose transport provider</option>
-                      {eligibleProviders.map((p) => (
-                        <option key={p._id} value={p._id}>
-                          {p.name} ({formatNumber(providerRemainingKg(p))} kg remaining){p.phone ? ` · ${p.phone}` : ''}
+                      {providers.map((p) => {
+                        const eligible = eligibleProviders.some((candidate) => candidate._id === p._id);
+                        return (
+                        <option key={p._id} value={p._id} disabled={!eligible}>
+                          {p.name} ({formatNumber(providerRemainingKg(p))} kg remaining){p.phone ? ` · ${p.phone}` : ''}{!eligible ? ' · Not eligible (region/capacity)' : ''}
                         </option>
-                      ))}
+                        );
+                      })}
                     </select>
                     <button
                       type="button"
