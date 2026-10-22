@@ -548,7 +548,7 @@ const allocateRequest = async (req, res) => {
             },
           },
         ],
-        { session }
+        { session, updatePipeline: true }
       );
 
       if (result.matchedCount !== 1) {
@@ -1147,7 +1147,7 @@ const allocateBatch = async (req, res) => {
               },
             },
           ],
-          { session }
+          { session, updatePipeline: true }
         );
 
         if (updated.matchedCount !== 1) {
@@ -1202,7 +1202,7 @@ const allocateBatch = async (req, res) => {
             },
           },
         ],
-        { session }
+        { session, updatePipeline: true }
       );
 
       if (updatedBatch.matchedCount !== 1) {
