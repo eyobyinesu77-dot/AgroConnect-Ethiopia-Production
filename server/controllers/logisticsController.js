@@ -173,7 +173,18 @@ const validateProviderBody = (body) => {
   if (!TransportProvider.VEHICLE_TYPES.includes(vehicleType)) {
     return `vehicleType must be one of: ${TransportProvider.VEHICLE_TYPES.join(', ')}.`;
   }
-  if (!(Number(capacityKg) > 0)) return 'capacityKg must be greater than 0.';
+  const capacity = Number(capacityKg);
+  if (!Number.isFinite(capacity) || capacity <= 0) return 'capacityKg must be greater than 0.';
+  const capacityRanges = {
+    'Pickup Car': [1000, 3000],
+    'Isuzu Truck': [2000, 7000],
+    'Heavy Truck': [10000, 30000],
+    'Motorbike/Tricycle': [10, 25],
+  };
+  const range = capacityRanges[vehicleType];
+  if (range && (capacity < range[0] || capacity > range[1])) {
+    return `${vehicleType} capacity must be between ${range[0]} and ${range[1]} kg.`;
+  }
   if (!Array.isArray(regionsServed) || regionsServed.length === 0) {
     return 'Select at least one region served.';
   }

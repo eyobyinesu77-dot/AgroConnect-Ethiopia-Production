@@ -273,61 +273,68 @@ test('forgot-password does not filter by role when looking up user', async () =>
   });
 });
 
-test('sendEmail.js (real code, fake Gmail SMTP): placeholder / unset / rejected / success', async () => {
+test('sendEmail.js (real Resend code): unconfigured / rejected / success', async () => {
   const load = () => {
     delete require.cache[require.resolve('../utils/sendEmail')];
-    const mod = require('../utils/sendEmail');
-    if (mod._resetTransporter) mod._resetTransporter();
-    return mod;
-  };
-  const msg = { email: 'a@b.co', subject: 's', message: 't' };
-
-  let lastMail = null;
-  let sendImpl = async (opts) => {
-    lastMail = opts;
-    return { accepted: [opts.to], rejected: [], messageId: '<ok@gmail>' };
+    return require('../utils/sendEmail');
   };
 
+  const msg = { email: 'a@b.co', subject: 'Test subject', message: 'Test message' };
   const Module = require('module');
-  const realLoadInner = Module._load;
+  const realLoad = Module._load;
+  let sendImpl;
+
   Module._load = function (request, parent, isMain) {
-    if (request === 'nodemailer') {
+    if (request === 'resend') {
       return {
-        createTransport: () => ({
-          sendMail: async (opts) => sendImpl(opts),
-        }),
+        Resend: class FakeResend {
+          constructor(apiKey) {
+            assert.equal(apiKey, 're_test_key');
+            this.emails = {
+              send: async (opts) => sendImpl(opts),
+            };
+          }
+        },
       };
     }
-    return realLoadInner.apply(this, arguments);
+    return realLoad.apply(this, arguments);
   };
 
   try {
-    await withEnv({ EMAIL_USER: 'me@gmail.com', EMAIL_PASS: 'your_app_password' }, async () => {
-      await assert.rejects(load()(msg), /placeholder|not configured/i);
+    await withEnv({ RESEND_API_KEY: '' }, async () => {
+      await assert.rejects(load()(msg), /RESEND_API_KEY|not configured/i);
     });
-    await withEnv({ EMAIL_USER: 'me@gmail.com' }, async () => {
-      await assert.rejects(load()(msg), /not configured/i);
-    });
-    await withEnv({ EMAIL_USER: 'me@gmail.com', EMAIL_PASS: 'abcdefghijklmnop', EMAIL_FROM: 'AgroConnect <me@gmail.com>' }, async () => {
-      sendImpl = async (opts) => ({ accepted: [], rejected: [opts.to], messageId: null });
-      await assert.rejects(load()(msg), /did not accept/i);
 
+    await withEnv({
+      RESEND_API_KEY: 're_test_key',
+      EMAIL_FROM: 'AgroConnect <onboarding@resend.dev>',
+    }, async () => {
+      sendImpl = async () => ({
+        data: null,
+        error: { message: 'Recipient rejected by provider' },
+      });
+      await assert.rejects(load()(msg), /Recipient rejected by provider/i);
+
+      let sentOptions;
       sendImpl = async (opts) => {
-        lastMail = opts;
-        return { accepted: [opts.to], rejected: [], messageId: '<ok@gmail>' };
+        sentOptions = opts;
+        return { data: { id: 'resend_test_123' }, error: null };
       };
+
       const info = await load()(msg);
-      assert.equal(info.messageId, '<ok@gmail>');
-      assert.equal(info.provider, 'gmail-smtp');
-      assert.equal(lastMail.to, 'a@b.co');
-      assert.equal(lastMail.subject, 's');
+      assert.equal(info.id, 'resend_test_123');
+      assert.deepEqual(sentOptions.to, ['a@b.co']);
+      assert.equal(sentOptions.subject, 'Test subject');
+      assert.equal(sentOptions.text, 'Test message');
+      assert.equal(sentOptions.from, 'AgroConnect <onboarding@resend.dev>');
 
       sendImpl = async () => {
-        throw Object.assign(new Error('Invalid login'), { code: 'EAUTH' });
+        throw new Error('Resend connection failed');
       };
-      await assert.rejects(load()(msg), /Invalid login/);
+      await assert.rejects(load()(msg), /Resend connection failed/i);
     });
   } finally {
-    Module._load = realLoadInner;
+    Module._load = realLoad;
+    delete require.cache[require.resolve('../utils/sendEmail')];
   }
 });

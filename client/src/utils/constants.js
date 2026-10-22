@@ -1007,10 +1007,9 @@ export const logisticsRegions = [
 ];
 
 export const vehicleTypes = [
-  'Pickup',
+  'Pickup Car',
   'Isuzu Truck',
   'Heavy Truck',
-  'Minibus',
   'Motorbike/Tricycle',
   'Animal Cart',
 ];

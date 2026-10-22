@@ -39,8 +39,20 @@ export default function AdminTransportProviders() {
       toast.error('Name and phone are required.');
       return;
     }
-    if (!form.capacityKg || Number(form.capacityKg) < 1) {
-      toast.error('Capacity (kg) must be greater than 0. Use at least 5000 for typical maize loads.');
+    const capacityKg = Number(form.capacityKg);
+    const capacityRanges = {
+      'Pickup Car': [1000, 3000],
+      'Isuzu Truck': [2000, 7000],
+      'Heavy Truck': [10000, 30000],
+      'Motorbike/Tricycle': [10, 25],
+    };
+    if (!Number.isFinite(capacityKg) || capacityKg <= 0) {
+      toast.error('Capacity (kg) must be greater than 0.');
+      return;
+    }
+    const range = capacityRanges[form.vehicleType];
+    if (range && (capacityKg < range[0] || capacityKg > range[1])) {
+      toast.error(`${form.vehicleType} capacity must be between ${range[0]} and ${range[1]} kg.`);
       return;
     }
     if (!Array.isArray(form.regionsServed) || form.regionsServed.length === 0) {
@@ -116,8 +128,8 @@ export default function AdminTransportProviders() {
               {vehicleTypes.map((v) => <option key={v} value={v}>{dataLabel(t, 'vehicle', v)}</option>)}
             </select>
           </div>
-          <div><label style={labelStyle}>{t('lg_capacity_kg')}</label><input type="number" min="1" value={form.capacityKg} onChange={(e) => setForm({ ...form, capacityKg: e.target.value })} required style={inputStyle} /></div>
-          <div><label style={labelStyle}>{t('lg_rate')}</label><input type="number" min="0" step="any" value={form.ratePerQuintalPerKm ?? ''} onChange={(e) => setForm({ ...form, ratePerQuintalPerKm: e.target.value })} style={inputStyle} /></div>
+          <div><label style={labelStyle}>{t('lg_capacity_kg')}</label><input type="number" min="1" value={form.capacityKg} onChange={(e) => setForm({ ...form, capacityKg: e.target.value })} required style={inputStyle} /><small style={{ display: 'block', color: '#555', marginTop: '0.25rem' }}>Pickup Car: 1,000–3,000 kg; Isuzu Truck: 2,000–7,000 kg; Heavy Truck: 10,000–30,000 kg; Motorbike/Tricycle: 10–25 kg.</small></div>
+          <div><label style={labelStyle}>Rate (ETB per quintal per kilometer)</label><input type="number" min="0" step="any" value={form.ratePerQuintalPerKm ?? ''} onChange={(e) => setForm({ ...form, ratePerQuintalPerKm: e.target.value })} style={inputStyle} /><small style={{ display: 'block', color: '#555', marginTop: '0.25rem' }}>1 quintal = 100 kg. This is the provider rate; this field alone does not calculate total transport cost.</small></div>
           <div style={{ gridColumn: '1 / -1' }}>
             <label style={labelStyle}>{t('lg_regions_served')}</label>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>

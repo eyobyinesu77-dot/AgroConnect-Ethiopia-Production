@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 
-const VEHICLE_TYPES = ['Pickup', 'Isuzu Truck', 'Heavy Truck', 'Minibus', 'Motorbike/Tricycle', 'Animal Cart'];
+const VEHICLE_TYPES = ['Pickup Car', 'Isuzu Truck', 'Heavy Truck', 'Motorbike/Tricycle', 'Animal Cart', 'Pickup', 'Minibus'];
 
 // Directory entry for a transport provider (PRD: Transport Provider
 // Directory). Managed by admins; browsable by farmers and buyers.
