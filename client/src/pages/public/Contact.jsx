@@ -162,7 +162,7 @@ export default function Contact() {
             disabled={isSubmitting}
             className="w-full inline-flex items-center justify-center gap-2 bg-[#087F5B] hover:bg-[#066647] disabled:opacity-60 text-white font-semibold py-2.5 rounded-lg transition-colors"
           >
-            {isSubmitting ? (t('contact_sending') || 'Sending...') : <>{(t('contact_send') || 'SEND MESSAGE').toUpperCase()} <Send className="h-4 w-4" /></>}
+            {isSubmitting ? (t('contact_sending') || 'Sending...') : <>SEND MESSAGE <Send className="h-4 w-4" /></>}
           </button>
         </form>
       </div>
