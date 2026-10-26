@@ -82,7 +82,7 @@ export default function Contact() {
               <input
                 id="contact-email"
                 type="email"
-                placeholder="Enter your email address"
+                placeholder="Enter Gmail"
                 value={msg.guestEmail}
                 onChange={(e) => setMsg({ ...msg, guestEmail: e.target.value })}
                 required
