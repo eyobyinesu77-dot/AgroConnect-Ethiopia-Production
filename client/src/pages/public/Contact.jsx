@@ -82,7 +82,7 @@ export default function Contact() {
               <input
                 id="contact-email"
                 type="email"
-                placeholder={t('auth_email_plain') || 'Email Address'}
+                placeholder="Enter your email address"
                 value={msg.guestEmail}
                 onChange={(e) => setMsg({ ...msg, guestEmail: e.target.value })}
                 required
@@ -138,7 +138,7 @@ export default function Contact() {
             </label>
             <textarea
               id="contact-message"
-              placeholder={t('contact_message_placeholder') || 'Message'}
+              placeholder="Enter your message here..."
               rows="5"
               value={msg.message}
               onChange={(e) => setMsg({ ...msg, message: e.target.value })}
@@ -162,7 +162,7 @@ export default function Contact() {
             disabled={isSubmitting}
             className="w-full inline-flex items-center justify-center gap-2 bg-[#087F5B] hover:bg-[#066647] disabled:opacity-60 text-white font-semibold py-2.5 rounded-lg transition-colors"
           >
-            {isSubmitting ? (t('contact_sending') || 'Sending...') : <>{t('contact_send') || 'Send Message'} <Send className="h-4 w-4" /></>}
+            {isSubmitting ? (t('contact_sending') || 'Sending...') : <>{(t('contact_send') || 'SEND MESSAGE').toUpperCase()} <Send className="h-4 w-4" /></>}
           </button>
         </form>
       </div>
