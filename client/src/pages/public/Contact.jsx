@@ -77,7 +77,7 @@ export default function Contact() {
           {!user && (
             <div>
               <label htmlFor="contact-email" className="block text-sm font-medium text-gray-700 mb-1">
-                {t('auth_email_plain') || 'Email Address'} <span className="text-red-600">*</span>
+                Email Address <span className="text-red-600">*</span>
               </label>
               <input
                 id="contact-email"
@@ -94,7 +94,7 @@ export default function Contact() {
 
           <div>
             <label htmlFor="contact-subject" className="block text-sm font-medium text-gray-700 mb-1">
-              {t('contact_subject_placeholder') || 'Subject'} <span className="text-red-600">*</span>
+              Subject <span className="text-red-600">*</span>
             </label>
             <select
               id="contact-subject"
@@ -134,7 +134,7 @@ export default function Contact() {
 
           <div>
             <label htmlFor="contact-message" className="block text-sm font-medium text-gray-700 mb-1">
-              {t('contact_message_placeholder') || 'Message'} <span className="text-red-600">*</span>
+              Message <span className="text-red-600">*</span>
             </label>
             <textarea
               id="contact-message"
