@@ -102,7 +102,7 @@ export default function Home() {
     <div className="w-full min-h-screen bg-[#F3F7F5] flex flex-col">
       {/* Hero Section */}
       <section
-        className="relative w-full flex items-center justify-center min-h-[calc(100svh-4rem)] px-4 py-12 sm:px-8 sm:py-16 md:px-12 md:py-20 lg:px-16 lg:py-24 text-center overflow-hidden bg-cover bg-center bg-no-repeat bg-[url('/images/hero-marketplace.png')]"
+        className="relative w-full min-h-[calc(100svh-4rem)] lg:min-h-[calc(100vh-4rem)] flex items-center justify-center px-4 py-10 sm:px-8 sm:py-12 md:px-12 md:py-16 lg:px-16 lg:py-20 text-center overflow-hidden bg-cover bg-center bg-no-repeat bg-[url('/images/hero-marketplace.png')]"
       >
         <div className="absolute inset-0 bg-gradient-to-br from-[#0B1420]/85 via-[#0B1420]/65 to-[#087F5B]/60" />
         <div className="relative z-10 w-full max-w-4xl mx-auto">
@@ -127,6 +127,9 @@ export default function Home() {
               {t('home_get_started') || 'Join AgroConnect'}
             </Link>
           </div>
+        </div>
+        <div className="absolute inset-x-0 bottom-3 z-10 px-4 text-center text-xs sm:text-sm text-white/90 drop-shadow-md">
+          © 2026 AgroConnect Ethiopia. All rights reserved.
         </div>
       </section>
 
