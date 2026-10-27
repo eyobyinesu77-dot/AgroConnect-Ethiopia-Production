@@ -82,7 +82,7 @@ export default function Contact() {
               <input
                 id="contact-email"
                 type="email"
-                placeholder="Enter Gmail"
+                placeholder="Enter gmail account"
                 value={msg.guestEmail}
                 onChange={(e) => setMsg({ ...msg, guestEmail: e.target.value })}
                 required
@@ -104,7 +104,7 @@ export default function Contact() {
               className={inputClass}
             >
               <option value="" disabled>
-                Select a subject
+                Select subject
               </option>
               <option value="Payment problem">Payment problem</option>
               <option value="Registration problem">Registration problem</option>
@@ -138,7 +138,7 @@ export default function Contact() {
             </label>
             <textarea
               id="contact-message"
-              placeholder="Enter your message here..."
+              placeholder="Enter message"
               rows="5"
               value={msg.message}
               onChange={(e) => setMsg({ ...msg, message: e.target.value })}
@@ -153,7 +153,7 @@ export default function Contact() {
             disabled={isSubmitting}
             className="w-full inline-flex items-center justify-center gap-2 bg-[#087F5B] hover:bg-[#066647] disabled:opacity-60 text-white font-semibold py-2.5 rounded-lg transition-colors"
           >
-            {isSubmitting ? (t('contact_sending') || 'Sending...') : <>SEND MESSAGE <Send className="h-4 w-4" /></>}
+            {isSubmitting ? (t('contact_sending') || 'Sending...') : <>Send message <Send className="h-4 w-4" /></>}
           </button>
         </form>
       </div>
