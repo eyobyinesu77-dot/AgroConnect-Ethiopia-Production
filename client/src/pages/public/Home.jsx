@@ -102,17 +102,17 @@ export default function Home() {
     <div className="w-full min-h-screen bg-[#F3F7F5] flex flex-col">
       {/* Hero Section */}
       <section
-        className="relative w-full min-h-[65vh] md:min-h-[75vh] lg:min-h-[80vh] flex items-center justify-center px-4 py-10 sm:px-8 sm:py-12 md:px-12 md:py-16 lg:px-16 lg:py-20 text-center overflow-hidden bg-cover bg-center bg-no-repeat bg-[url('/images/hero-marketplace.png')]"
+        className="relative w-full min-h-[42vh] md:min-h-[48vh] lg:min-h-[52vh] flex items-center justify-start px-4 py-8 sm:px-8 sm:py-10 md:px-12 lg:px-16 text-left overflow-hidden bg-cover bg-center bg-no-repeat bg-[url('/images/hero-marketplace.png')]"
       >
-        <div className="absolute inset-0 bg-gradient-to-br from-[#0B1420]/85 via-[#0B1420]/65 to-[#087F5B]/60" />
-        <div className="relative z-10 w-full max-w-4xl mx-auto">
-          <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-[3.25rem] font-extrabold mb-5 text-white drop-shadow-lg leading-tight tracking-tight">
+        <div className="absolute inset-0 bg-gradient-to-r from-[#071D15]/80 via-[#071D15]/45 to-transparent" />
+        <div className="relative z-10 w-full max-w-7xl mx-auto">
+          <h1 className="max-w-2xl text-3xl sm:text-4xl md:text-5xl lg:text-[3.25rem] font-extrabold mb-4 text-white drop-shadow-lg leading-tight tracking-tight">
             {t('home_hero_title')}
           </h1>
-          <p className="text-white/95 mb-8 text-base sm:text-lg md:text-xl drop-shadow-md max-w-2xl mx-auto leading-relaxed">
+          <p className="text-white/95 mb-6 text-base sm:text-lg md:text-xl drop-shadow-md max-w-xl mx-0 leading-relaxed">
             {t('home_hero_text')}
           </p>
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-start gap-3 sm:gap-4">
             <Link
               to="/marketplace"
               className="inline-flex w-full sm:w-auto items-center justify-center gap-2 bg-[#087F5B] hover:bg-[#066647] text-white font-semibold text-base px-6 sm:px-7 py-3 rounded-lg shadow-lg transition-colors"
@@ -127,9 +127,6 @@ export default function Home() {
               {t('home_get_started') || 'Join AgroConnect'}
             </Link>
           </div>
-        </div>
-        <div className="absolute inset-x-0 bottom-3 z-10 px-4 text-center text-xs sm:text-sm text-white/90 drop-shadow-md">
-          © 2026 AgroConnect Ethiopia. All rights reserved.
         </div>
       </section>
 
