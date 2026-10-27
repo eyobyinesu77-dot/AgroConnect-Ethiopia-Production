@@ -74,23 +74,21 @@ export default function Contact() {
         </p>
 
         <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow-sm border border-[#087F5B]/20 p-6 md:p-8 space-y-4">
-          {!user && (
-            <div>
-              <label htmlFor="contact-email" className="block text-sm font-medium text-gray-700 mb-1">
-                Email Address <span className="text-red-600">*</span>
-              </label>
-              <input
-                id="contact-email"
-                type="email"
-                placeholder="Enter gmail account"
-                value={msg.guestEmail}
-                onChange={(e) => setMsg({ ...msg, guestEmail: e.target.value })}
-                required
-                className={inputClass}
-                autoComplete="email"
-              />
-            </div>
-          )}
+          <div>
+            <label htmlFor="contact-email" className="block text-sm font-medium text-gray-700 mb-1">
+              Gmail account <span className="text-red-600">*</span>
+            </label>
+            <input
+              id="contact-email"
+              type="email"
+              placeholder="Enter gmail account"
+              value={msg.guestEmail || user?.email || ''}
+              onChange={(e) => setMsg({ ...msg, guestEmail: e.target.value })}
+              required
+              className={inputClass}
+              autoComplete="email"
+            />
+          </div>
 
           <div>
             <label htmlFor="contact-subject" className="block text-sm font-medium text-gray-700 mb-1">
