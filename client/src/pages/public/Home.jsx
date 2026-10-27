@@ -102,10 +102,10 @@ export default function Home() {
     <div className="w-full min-h-screen bg-[#F3F7F5] flex flex-col">
       {/* Hero Section */}
       <section
-        className="relative w-full flex items-center justify-center min-h-[calc(100svh-4rem)] px-5 py-16 sm:px-8 md:px-12 lg:px-16 text-center overflow-hidden bg-cover bg-center bg-no-repeat bg-[url('/images/hero-marketplace.png')]"
+        className="relative w-full flex items-center justify-center min-h-[calc(100svh-4rem)] px-4 py-12 sm:px-8 sm:py-16 md:px-12 md:py-20 lg:px-16 lg:py-24 text-center overflow-hidden bg-cover bg-center bg-no-repeat bg-[url('/images/hero-marketplace.png')]"
       >
         <div className="absolute inset-0 bg-gradient-to-br from-[#0B1420]/85 via-[#0B1420]/65 to-[#087F5B]/60" />
-        <div className="relative z-10 max-w-4xl mx-auto">
+        <div className="relative z-10 w-full max-w-4xl mx-auto">
           <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-[3.25rem] font-extrabold mb-5 text-white drop-shadow-lg leading-tight tracking-tight">
             {t('home_hero_title')}
           </h1>
@@ -115,14 +115,14 @@ export default function Home() {
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
             <Link
               to="/marketplace"
-              className="inline-flex items-center gap-2 bg-[#087F5B] hover:bg-[#066647] text-white font-semibold text-base px-7 py-3 rounded-lg shadow-lg transition-colors"
+              className="inline-flex w-full sm:w-auto items-center justify-center gap-2 bg-[#087F5B] hover:bg-[#066647] text-white font-semibold text-base px-6 sm:px-7 py-3 rounded-lg shadow-lg transition-colors"
             >
               {t('home_cta_marketplace') || 'Explore Marketplace'}
               <ArrowRight className="w-4 h-4" />
             </Link>
             <Link
               to="/register"
-              className="inline-flex items-center gap-2 bg-white/95 hover:bg-white text-[#0B1420] font-semibold text-base px-7 py-3 rounded-lg shadow-lg transition-colors"
+              className="inline-flex w-full sm:w-auto items-center justify-center gap-2 bg-white/95 hover:bg-white text-[#0B1420] font-semibold text-base px-6 sm:px-7 py-3 rounded-lg shadow-lg transition-colors"
             >
               {t('home_get_started') || 'Join AgroConnect'}
             </Link>
