@@ -102,7 +102,7 @@ export default function Home() {
     <div className="w-full min-h-screen bg-[#F3F7F5] flex flex-col">
       {/* Hero Section */}
       <section
-        className="relative w-full min-h-[calc(100svh-4rem)] lg:min-h-[calc(100vh-4rem)] flex items-center justify-center px-4 py-10 sm:px-8 sm:py-12 md:px-12 md:py-16 lg:px-16 lg:py-20 text-center overflow-hidden bg-cover bg-center bg-no-repeat bg-[url('/images/hero-marketplace.png')]"
+        className="relative w-full min-h-[65vh] md:min-h-[75vh] lg:min-h-[80vh] flex items-center justify-center px-4 py-10 sm:px-8 sm:py-12 md:px-12 md:py-16 lg:px-16 lg:py-20 text-center overflow-hidden bg-cover bg-center bg-no-repeat bg-[url('/images/hero-marketplace.png')]"
       >
         <div className="absolute inset-0 bg-gradient-to-br from-[#0B1420]/85 via-[#0B1420]/65 to-[#087F5B]/60" />
         <div className="relative z-10 w-full max-w-4xl mx-auto">
