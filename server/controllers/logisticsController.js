@@ -880,8 +880,25 @@ const getAggregationSuggestions = async (req, res) => {
     const groups = await LogisticsRequest.aggregate([
       { $match: { status: 'Pending' } },
       {
+        $set: {
+          _normalizedPickupRegion: {
+            $toLower: {
+              $trim: { input: { $ifNull: ['$pickupRegion', ''] } },
+            },
+          },
+          _normalizedDestinationRegion: {
+            $toLower: {
+              $trim: { input: { $ifNull: ['$destinationRegion', ''] } },
+            },
+          },
+        },
+      },
+      {
         $group: {
-          _id: { pickupRegion: '$pickupRegion', destinationRegion: '$destinationRegion' },
+          _id: {
+            pickupRegion: '$_normalizedPickupRegion',
+            destinationRegion: '$_normalizedDestinationRegion',
+          },
           requestIds: { $push: '$_id' },
           totalQuantityKg: { $sum: '$quantityKg' },
           count: { $sum: 1 },
@@ -893,10 +910,23 @@ const getAggregationSuggestions = async (req, res) => {
     ]);
 
     const suggestions = await Promise.all(groups.map(async (g) => {
-      const matches = await findMatchingProviders(g._id.pickupRegion, g._id.destinationRegion, g.totalQuantityKg);
+      const request = await LogisticsRequest.findById(g.requestIds[0])
+        .select('pickupRegion destinationRegion')
+        .lean();
+
+      const pickupRegion = request?.pickupRegion || g._id.pickupRegion;
+      const destinationRegion =
+          request?.destinationRegion || g._id.destinationRegion;
+
+      const matches = await findMatchingProviders(
+        pickupRegion,
+        destinationRegion,
+        g.totalQuantityKg
+      );
+
       return {
-        pickupRegion: g._id.pickupRegion,
-        destinationRegion: g._id.destinationRegion,
+        pickupRegion,
+        destinationRegion,
         requestIds: g.requestIds,
         requestCount: g.count,
         totalQuantityKg: g.totalQuantityKg,
@@ -907,10 +937,10 @@ const getAggregationSuggestions = async (req, res) => {
 
     res.json(suggestions);
   } catch (error) {
+    console.error('Aggregation suggestions error:', error);
     res.status(500).json({ message: error.message });
   }
 };
-
 // POST /api/logistics/aggregation/batches  { requestIds, providerId? } (admin)
 const createBatch = async (req, res) => {
   const session = await mongoose.startSession();
@@ -956,10 +986,13 @@ const createBatch = async (req, res) => {
 
       const { pickupRegion, destinationRegion } = requests[0];
 
+      const normalizeRegion = (value) =>
+        String(value || '').trim().toLowerCase();
+
       if (requests.some(
         (r) =>
-          r.pickupRegion !== pickupRegion ||
-          r.destinationRegion !== destinationRegion
+          normalizeRegion(r.pickupRegion) !== normalizeRegion(pickupRegion) ||
+          normalizeRegion(r.destinationRegion) !== normalizeRegion(destinationRegion)
       )) {
         const error = new Error(
           'All requests in a batch must share the same pickup and destination region.'
