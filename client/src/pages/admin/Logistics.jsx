@@ -63,6 +63,18 @@ export default function AdminLogistics() {
   };
 
   // Use capacity remaining after active allocations, not rated capacity alone.
+  const normalizeRegion = (value) =>
+    String(value ?? '').trim().toLocaleLowerCase();
+
+  const providerServesRegion = (provider, region) => {
+    const target = normalizeRegion(region);
+    return Boolean(target) &&
+      Array.isArray(provider?.regionsServed) &&
+      provider.regionsServed.some(
+        (served) => normalizeRegion(served) === target
+      );
+  };
+
   const providerRemainingKg = (p) =>
     Math.max(0, Number(p.remainingCapacityKg ?? p.capacityKg) || 0);
 
@@ -71,8 +83,8 @@ export default function AdminLogistics() {
       p.isAvailable !== false &&
       providerRemainingKg(p) >= quantityKg &&
       Array.isArray(p.regionsServed) &&
-      p.regionsServed.includes(r.pickupRegion) &&
-      p.regionsServed.includes(r.destinationRegion)
+      providerServesRegion(p, r.pickupRegion) &&
+      providerServesRegion(p, r.destinationRegion)
     );
     return { list: eligible, matched: eligible.length > 0, underCapacityOnly: false };
   };
@@ -82,8 +94,8 @@ export default function AdminLogistics() {
       p.isAvailable !== false &&
       providerRemainingKg(p) > 0 &&
       Array.isArray(p.regionsServed) &&
-      p.regionsServed.includes(b.pickupRegion) &&
-      p.regionsServed.includes(b.destinationRegion)
+      providerServesRegion(p, b.pickupRegion) &&
+      providerServesRegion(p, b.destinationRegion)
     );
     return {
       list: eligible,
@@ -169,15 +181,6 @@ export default function AdminLogistics() {
       () => logisticsService.allocateRequest(r._id, providerId, quantityKg),
       'lg_assigned_ok'
     );
-  };
-
-  const handleAssignBatch = (b) => {
-    const providerId = choice[b._id];
-    if (!providerId) {
-      toast.error(t('lg_select_provider_first'));
-      return;
-    }
-    run(b._id, () => logisticsService.assignBatchProvider(b._id, providerId), 'lg_assigned_ok');
   };
 
   const renderProviderSelect = (id, options, matched, underCapacityOnly = false) => (

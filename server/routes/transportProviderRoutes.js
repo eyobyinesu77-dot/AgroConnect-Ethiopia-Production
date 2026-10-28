@@ -9,7 +9,6 @@ router.use(protect);
 // Directory is browsable by any signed-in role; only admins manage it.
 router.get('/', c.listProviders);
 router.post('/', authorizeRoles('admin'), c.createProvider);
-router.post('/seed', authorizeRoles('admin'), c.seedProviders);
 router.put('/:id', authorizeRoles('admin'), c.updateProvider);
 router.delete('/:id', authorizeRoles('admin'), c.deleteProvider);
 

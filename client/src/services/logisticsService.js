@@ -6,7 +6,6 @@ export const logisticsService = {
   createProvider: async (data) => (await API.post('/transport-providers', data)).data,
   updateProvider: async (id, data) => (await API.put(`/transport-providers/${id}`, data)).data,
   deleteProvider: async (id) => (await API.delete(`/transport-providers/${id}`)).data,
-  seedProviders: async () => (await API.post('/transport-providers/seed')).data,
 
   // Requests (farmer / buyer)
   createRequest: async (data) => (await API.post('/logistics', data)).data,
@@ -28,6 +27,4 @@ export const logisticsService = {
     (await API.post('/logistics/aggregation/batches', { requestIds, providerId })).data,
   allocateBatch: async (id, providerId, portions) =>
     (await API.post(`/logistics/aggregation/batches/${id}/allocations`, { providerId, portions })).data,
-  assignBatchProvider: async (id, providerId) =>
-    (await API.patch(`/logistics/aggregation/batches/${id}/assign`, { providerId })).data,
 };

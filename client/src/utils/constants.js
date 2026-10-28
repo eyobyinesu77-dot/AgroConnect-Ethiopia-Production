@@ -1011,5 +1011,4 @@ export const vehicleTypes = [
   'Isuzu Truck',
   'Heavy Truck',
   'Motorbike/Tricycle',
-  'Animal Cart',
 ];

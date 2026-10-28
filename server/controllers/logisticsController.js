@@ -95,14 +95,29 @@ const lockProviderCapacity = async (providerId, session, fail) => {
 // Matching: return available providers serving both regions
 // with sufficient capacity. Prefer the tightest capacity fit.
 // ---------------------------------------------------------------------------
-const findMatchingProviders = async (pickupRegion, destinationRegion, quantityKg) => {
-  const candidates = await TransportProvider.find({
-    isAvailable: true,
-    regionsServed: { $all: [pickupRegion, destinationRegion] },
-  });
+const normalizeRegion = (value) =>
+  String(value ?? '').trim().toLocaleLowerCase();
 
+const providerServesRegion = (provider, region) => {
+  const target = normalizeRegion(region);
+  return Boolean(target) &&
+    Array.isArray(provider?.regionsServed) &&
+    provider.regionsServed.some(
+      (served) => normalizeRegion(served) === target
+    );
+};
+
+const findMatchingProviders = async (pickupRegion, destinationRegion, quantityKg) => {
+  // Normalize in JavaScript so older records with case/space differences match.
+  const candidates = await TransportProvider.find({ isAvailable: true });
   const matches = [];
+
   for (const provider of candidates) {
+    if (
+      !providerServesRegion(provider, pickupRegion) ||
+      !providerServesRegion(provider, destinationRegion)
+    ) continue;
+
     const activeLoadKg = await getProviderActiveLoadKg(provider._id);
     const remainingCapacityKg = Math.max(
       0,
@@ -122,7 +137,7 @@ const findMatchingProviders = async (pickupRegion, destinationRegion, quantityKg
   }
 
   return matches.sort((a, b) => b.score - a.score);
-};
+};;
 
 const notify = async (userId, message) => {
   try {
@@ -216,49 +231,118 @@ const createProvider = async (req, res) => {
 
 // PUT /api/transport-providers/:id (admin)
 const updateProvider = async (req, res) => {
-  try {
-    if (!isValidId(req.params.id)) return res.status(400).json({ message: 'Invalid provider id.' });
-    const error = validateProviderBody(req.body);
-    if (error) return res.status(400).json({ message: error });
+  if (!isValidId(req.params.id)) {
+    return res.status(400).json({ message: 'Invalid provider id.' });
+  }
 
-    const provider = await TransportProvider.findByIdAndUpdate(
-      req.params.id,
-      {
-        name: req.body.name,
-        phone: normalizePhone(req.body.phone),
-        vehicleType: req.body.vehicleType,
-        capacityKg: Number(req.body.capacityKg),
-        regionsServed: req.body.regionsServed,
-        ratePerQuintalPerKm: req.body.ratePerQuintalPerKm === '' ? undefined : req.body.ratePerQuintalPerKm,
-        isAvailable: req.body.isAvailable !== false,
-        notes: req.body.notes,
-      },
-      { new: true, runValidators: true }
-    );
-    if (!provider) return res.status(404).json({ message: 'Provider not found.' });
-    res.json(provider);
+  const validationError = validateProviderBody(req.body);
+  if (validationError) {
+    return res.status(400).json({ message: validationError });
+  }
+
+  const session = await mongoose.startSession();
+
+  try {
+    let updatedProvider;
+    const fail = (statusCode, message) => {
+      const error = new Error(message);
+      error.statusCode = statusCode;
+      throw error;
+    };
+
+    await session.withTransaction(async () => {
+      const existing = await TransportProvider.findById(req.params.id).session(session);
+      if (!existing) fail(404, 'Provider not found.');
+
+      await lockProviderCapacity(req.params.id, session, fail);
+
+      const activeLoadKg = await getProviderActiveLoadKg(req.params.id, session);
+      const capacityKg = Number(req.body.capacityKg);
+
+      if (capacityKg < activeLoadKg) {
+        fail(400, `Capacity cannot be reduced below the provider's active load of ${activeLoadKg} kg.`);
+      }
+
+      updatedProvider = await TransportProvider.findByIdAndUpdate(
+        req.params.id,
+        {
+          name: req.body.name,
+          phone: normalizePhone(req.body.phone),
+          vehicleType: req.body.vehicleType,
+          capacityKg,
+          regionsServed: req.body.regionsServed,
+          ratePerQuintalPerKm: req.body.ratePerQuintalPerKm === '' ? undefined : req.body.ratePerQuintalPerKm,
+          isAvailable: req.body.isAvailable !== false,
+          notes: req.body.notes,
+        },
+        { new: true, runValidators: true, session }
+      );
+
+      if (!updatedProvider) fail(404, 'Provider not found.');
+    });
+
+    return res.json(updatedProvider);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('Update provider error:', error);
+    return res.status(error.statusCode || 500).json({
+      message: error.statusCode ? error.message : 'Unable to update provider. Please try again.',
+    });
+  } finally {
+    await session.endSession();
   }
 };
 
-// DELETE /api/transport-providers/:id (admin) — blocked while the provider
-// still has live (non-finished) work assigned.
+// DELETE /api/transport-providers/:id (admin) — blocked while active work exists.
 const deleteProvider = async (req, res) => {
+  if (!isValidId(req.params.id)) {
+    return res.status(400).json({ message: 'Invalid provider id.' });
+  }
+
+  const session = await mongoose.startSession();
+
   try {
-    if (!isValidId(req.params.id)) return res.status(400).json({ message: 'Invalid provider id.' });
-    const inUse = await LogisticsRequest.exists({
-      assignedProvider: req.params.id,
-      status: { $in: ['Assigned', 'In Transit'] },
+    const fail = (statusCode, message) => {
+      const error = new Error(message);
+      error.statusCode = statusCode;
+      throw error;
+    };
+
+    await session.withTransaction(async () => {
+      const existing = await TransportProvider.findById(req.params.id).session(session);
+      if (!existing) fail(404, 'Provider not found.');
+
+      await lockProviderCapacity(req.params.id, session, fail);
+
+      const activeRequest = await LogisticsRequest.exists({
+        assignedProvider: req.params.id,
+        status: { $in: ACTIVE_ALLOCATION_STATUSES },
+      }).session(session);
+
+      const activeAllocation = await TransportAllocation.exists({
+        provider: req.params.id,
+        status: { $in: ACTIVE_ALLOCATION_STATUSES },
+      }).session(session);
+
+      if (activeRequest || activeAllocation) {
+        fail(400, 'This provider has active jobs. Mark it unavailable instead of deleting.');
+      }
+
+      const deleted = await TransportProvider.findByIdAndDelete(
+        req.params.id,
+        { session }
+      );
+
+      if (!deleted) fail(404, 'Provider not found.');
     });
-    if (inUse) {
-      return res.status(400).json({ message: 'This provider has active jobs. Mark it unavailable instead of deleting.' });
-    }
-    const provider = await TransportProvider.findByIdAndDelete(req.params.id);
-    if (!provider) return res.status(404).json({ message: 'Provider not found.' });
-    res.json({ message: 'Provider deleted.' });
+
+    return res.json({ message: 'Provider deleted.' });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('Delete provider error:', error);
+    return res.status(error.statusCode || 500).json({
+      message: error.statusCode ? error.message : 'Unable to delete provider. Please try again.',
+    });
+  } finally {
+    await session.endSession();
   }
 };
 
@@ -502,9 +586,8 @@ const allocateRequest = async (req, res) => {
       }
 
       if (
-        !Array.isArray(provider.regionsServed) ||
-        !provider.regionsServed.includes(request.pickupRegion) ||
-        !provider.regionsServed.includes(request.destinationRegion)
+        !providerServesRegion(provider, request.pickupRegion) ||
+        !providerServesRegion(provider, request.destinationRegion)
       ) {
         fail(
           400,
@@ -1080,9 +1163,8 @@ const allocateBatch = async (req, res) => {
       }
 
       if (
-        !Array.isArray(provider.regionsServed) ||
-        !provider.regionsServed.includes(batch.pickupRegion) ||
-        !provider.regionsServed.includes(batch.destinationRegion)
+        !providerServesRegion(provider, batch.pickupRegion) ||
+        !providerServesRegion(provider, batch.destinationRegion)
       ) {
         fail(400, 'Provider must serve both the pickup and destination regions.');
       }
@@ -1278,57 +1360,10 @@ const allocateBatch = async (req, res) => {
   }
 };
 
-// POST /api/transport-providers/seed (admin) — create a few demo providers if none exist
-const seedProviders = async (req, res) => {
-  try {
-    const count = await TransportProvider.countDocuments();
-    if (count > 0) {
-      return res.json({ message: `Already have ${count} provider(s). Nothing seeded.`, created: [] });
-    }
-    const samples = [
-      {
-        name: 'Abebe Heavy Transport',
-        phone: '0911223344',
-        vehicleType: 'Heavy Truck',
-        capacityKg: 15000,
-        regionsServed: ['Amhara', 'Addis Ababa', 'Oromia', 'Tigray', 'Dire Dawa'],
-        ratePerQuintalPerKm: 12,
-        isAvailable: true,
-        notes: 'Demo provider — long-haul',
-        createdBy: req.user._id,
-      },
-      {
-        name: 'Selam Isuzu Logistics',
-        phone: '0922334455',
-        vehicleType: 'Isuzu Truck',
-        capacityKg: 8000,
-        regionsServed: ['Oromia', 'Addis Ababa', 'Sidama', 'South West Ethiopia Peoples', 'Central Ethiopia'],
-        ratePerQuintalPerKm: 10,
-        isAvailable: true,
-        notes: 'Demo provider — central routes',
-        createdBy: req.user._id,
-      },
-      {
-        name: 'Hawassa Pickup Service',
-        phone: '0933445566',
-        vehicleType: 'Pickup',
-        capacityKg: 2000,
-        regionsServed: ['Sidama', 'South Ethiopia', 'Addis Ababa'],
-        ratePerQuintalPerKm: 15,
-        isAvailable: true,
-        notes: 'Demo provider — small loads',
-        createdBy: req.user._id,
-      },
-    ];
-    const created = await TransportProvider.insertMany(samples);
-    res.status(201).json({ message: `Seeded ${created.length} providers.`, created });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
+
 
 module.exports = {
-  listProviders, createProvider, updateProvider, deleteProvider, seedProviders,
+  listProviders, createProvider, updateProvider, deleteProvider,
   createRequest, getMyRequests, cancelRequest, getAllRequests,
   getRequestMatches, assignProvider, allocateRequest, updateRequestStatus,
   getAggregationSuggestions, createBatch, getBatches, assignBatchProvider,

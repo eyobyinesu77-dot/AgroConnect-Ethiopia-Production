@@ -94,16 +94,6 @@ export default function AdminTransportProviders() {
     }
   };
 
-  const handleSeed = async () => {
-    try {
-      const res = await logisticsService.seedProviders();
-      toast.success(res?.message || 'Demo providers added.');
-      load();
-    } catch (err) {
-      const msg = err?.response?.data?.message || t(apiErrorKey(err, 'lg_load_error', 'lg_load_error'));
-      toast.error(msg);
-    }
-  };
 
   if (loading) return <LoadingSpinner fullScreen={false} label={t('common_loading')} />;
 
@@ -154,17 +144,7 @@ export default function AdminTransportProviders() {
       {providers.length === 0 ? (
         <div style={{ color: '#666', padding: '1.5rem 0' }}>
           <p>{t('lg_dir_empty')}</p>
-          <p style={{ fontSize: '0.9rem', marginTop: '0.5rem' }}>
-            Add a provider manually, or seed three demo transporters that cover the main regions and capacities used by pending requests.
-          </p>
-          <button
-            type="button"
-            onClick={handleSeed}
-            style={{ marginTop: '0.75rem', backgroundColor: '#1565c0', color: 'white', border: 'none', padding: '0.55rem 1rem', borderRadius: '4px', fontWeight: 600, cursor: 'pointer' }}
-          >
-            Seed demo providers
-          </button>
-        </div>
+</div>
       ) : (
         <div style={{ backgroundColor: 'white', borderRadius: '8px', boxShadow: '0 4px 10px rgba(0,0,0,0.05)', overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.88rem' }}>
