@@ -167,7 +167,7 @@ export default function Home() {
       </section>
 
       {/* How It Works */}
-      <section className="max-w-7xl mx-auto w-full py-14 md:py-20 px-4 md:px-8">
+      <section className="max-w-7xl mx-auto w-full pt-10 pb-3 md:pt-12 md:pb-4 px-4 md:px-8">
         <h2 className="text-2xl md:text-3xl font-bold text-center mb-3 text-[#0B1420]">
           {t('home_how_title') || 'How It Works'}
         </h2>
@@ -190,7 +190,7 @@ export default function Home() {
           ))}
         </div>
 
-        <div className="text-center mt-12">
+        <div className="text-center mt-8">
           <Link
             to="/register"
             className="inline-flex items-center gap-2 bg-[#087F5B] hover:bg-[#066647] text-white font-semibold px-8 py-3 rounded-lg shadow transition-colors"
