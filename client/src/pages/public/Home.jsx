@@ -100,37 +100,44 @@ export default function Home() {
 
   return (
     <div className="w-full min-h-screen bg-[#F3F7F5] flex flex-col">
-      {/* Hero Section */}
-      <section
-        className="relative w-full min-h-[42vh] md:min-h-[48vh] lg:min-h-[52vh] flex items-center justify-start px-4 py-8 sm:px-8 sm:py-10 md:px-12 lg:px-16 text-left overflow-hidden bg-cover bg-center bg-no-repeat bg-[url('/images/hero-marketplace.png')]"
-      >
-        <div className="absolute inset-0 bg-gradient-to-r from-[#071D15]/80 via-[#071D15]/45 to-transparent" />
-        <div className="relative z-10 w-full max-w-7xl mx-auto">
-          <h1 className="max-w-2xl text-3xl sm:text-4xl md:text-5xl lg:text-[3.25rem] font-extrabold mb-4 text-white drop-shadow-lg leading-tight tracking-tight">
-            {t('home_hero_title')}
-          </h1>
-          <p className="text-white/95 mb-6 text-base sm:text-lg md:text-xl drop-shadow-md max-w-xl mx-0 leading-relaxed">
-            {t('home_hero_text')}
-          </p>
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-start gap-3 sm:gap-4">
-            <Link
-              to="/marketplace"
-              className="inline-flex w-full sm:w-auto items-center justify-center gap-2 bg-[#087F5B] hover:bg-[#066647] text-white font-semibold text-base px-6 sm:px-7 py-3 rounded-lg shadow-lg transition-colors"
-            >
-              {t('home_cta_marketplace') || 'Explore Marketplace'}
-              <ArrowRight className="w-4 h-4" />
-            </Link>
-            <Link
-              to="/register"
-              className="inline-flex w-full sm:w-auto items-center justify-center gap-2 bg-white/95 hover:bg-white text-[#0B1420] font-semibold text-base px-6 sm:px-7 py-3 rounded-lg shadow-lg transition-colors"
-            >
-              {t('home_get_started') || 'Join AgroConnect'}
-            </Link>
+      {/* Compact Horizontal Hero */}
+      <section className="w-full bg-[#F3F7F5] px-4 py-6 sm:px-8 md:py-8 lg:px-12">
+        <div className="mx-auto grid max-w-7xl grid-cols-1 items-center gap-6 overflow-hidden rounded-2xl bg-white p-5 shadow-sm sm:p-7 md:grid-cols-[1.05fr_0.95fr] md:gap-8 lg:p-9">
+          <div className="flex flex-col items-start text-left">
+            <span className="mb-3 inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1.5 text-sm font-semibold text-[#087F5B]">
+              <Sprout className="h-4 w-4" />
+              AgroConnect Ethiopia
+            </span>
+            <h1 className="mb-3 max-w-xl text-3xl font-extrabold leading-tight tracking-tight text-[#123126] sm:text-4xl lg:text-5xl">
+              {t('home_hero_title')}
+            </h1>
+            <p className="mb-5 max-w-xl text-sm leading-6 text-gray-600 sm:text-base sm:leading-7">
+              {t('home_hero_text')}
+            </p>
+            <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center">
+              <Link
+                to="/marketplace"
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#087F5B] px-5 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#066647]"
+              >
+                {t('home_cta_marketplace') || 'Explore Marketplace'}
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+              <Link
+                to="/register"
+                className="inline-flex items-center justify-center rounded-lg border border-[#087F5B]/25 bg-white px-5 py-3 text-sm font-semibold text-[#087F5B] transition-colors hover:bg-emerald-50"
+              >
+                {t('home_get_started') || 'Join AgroConnect'}
+              </Link>
+            </div>
           </div>
+          <div
+            role="img"
+            aria-label="Ethiopian farmers and buyers connecting at a local agricultural market"
+            className="min-h-[190px] w-full rounded-xl bg-cover bg-center bg-no-repeat sm:min-h-[230px] md:min-h-[280px]"
+            style={{ backgroundImage: "url('/images/hero-marketplace.png')" }}
+          />
         </div>
       </section>
-
-
 
       {/* Features */}
       <section className="bg-white border-y border-[#087F5B]/20">
