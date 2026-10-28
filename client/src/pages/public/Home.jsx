@@ -99,7 +99,7 @@ export default function Home() {
   }, []);
 
   return (
-    <div className="w-full min-h-screen bg-[#F3F7F5] flex flex-col">
+    <div className="w-full bg-[#F3F7F5] flex flex-col">
       {/* Compact Horizontal Hero */}
       <section className="w-full bg-[#F3F7F5] px-4 py-6 sm:px-8 md:py-8 lg:px-12">
         <div className="mx-auto grid max-w-7xl grid-cols-1 items-center gap-6 overflow-hidden rounded-2xl bg-white p-5 shadow-sm sm:p-7 md:grid-cols-[1.05fr_0.95fr] md:gap-8 lg:p-9">
