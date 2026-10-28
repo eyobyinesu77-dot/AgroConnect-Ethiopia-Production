@@ -96,7 +96,7 @@ const call = async (handler, body) => {
   return res;
 };
 const withEnv = async (env, fn) => {
-  const keys = ['NODE_ENV', 'CLIENT_URL', 'FRONTEND_URL', 'EMAIL_USER', 'EMAIL_PASS', 'EMAIL_FROM', 'JWT_SECRET'];
+  const keys = ['NODE_ENV', 'CLIENT_URL', 'FRONTEND_URL', 'EMAIL_USER', 'EMAIL_PASS', 'EMAIL_FROM', 'SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS', 'RESEND_API_KEY', 'JWT_SECRET'];
   const saved = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
   keys.forEach((k) => delete process.env[k]);
   Object.assign(process.env, env);
@@ -273,68 +273,108 @@ test('forgot-password does not filter by role when looking up user', async () =>
   });
 });
 
-test('sendEmail.js (real Resend code): unconfigured / rejected / success', async () => {
+test('sendEmail.js (real SMTP code): unconfigured / rejected / success / verification', async () => {
   const load = () => {
     delete require.cache[require.resolve('../utils/sendEmail')];
     return require('../utils/sendEmail');
   };
 
-  const msg = { email: 'a@b.co', subject: 'Test subject', message: 'Test message' };
-  const Module = require('module');
-  const realLoad = Module._load;
-  let sendImpl;
-
-  Module._load = function (request, parent, isMain) {
-    if (request === 'resend') {
-      return {
-        Resend: class FakeResend {
-          constructor(apiKey) {
-            assert.equal(apiKey, 're_test_key');
-            this.emails = {
-              send: async (opts) => sendImpl(opts),
-            };
-          }
-        },
-      };
-    }
-    return realLoad.apply(this, arguments);
+  const msg = {
+    email: 'a@b.co',
+    subject: 'Test subject',
+    message: 'Test message',
+    html: '<p>Test message</p>',
   };
 
+  const originalCreateTransport = fakeNodemailer.createTransport;
+  const originalSendMail = smtp.sendMail;
+  const originalVerify = smtp.verify;
+
+  let transportOptions;
+  let sentOptions;
+  let mode = 'success';
+
   try {
-    await withEnv({ RESEND_API_KEY: '' }, async () => {
-      await assert.rejects(load()(msg), /RESEND_API_KEY|not configured/i);
+    await withEnv({
+      SMTP_HOST: '',
+      SMTP_PORT: '',
+      SMTP_USER: '',
+      SMTP_PASS: '',
+      EMAIL_USER: '',
+      EMAIL_PASS: '',
+    }, async () => {
+      const sendEmail = load();
+      assert.equal(sendEmail.isConfigured(), false);
+      await assert.rejects(sendEmail(msg), /SMTP_USER and SMTP_PASS|not configured/i);
     });
+
+    fakeNodemailer.createTransport = (options) => {
+      transportOptions = options;
+      return smtp;
+    };
+
+    smtp.sendMail = async (options) => {
+      if (mode === 'reject') {
+        throw new Error('Recipient rejected by SMTP');
+      }
+      sentOptions = options;
+      return {
+        messageId: '<smtp_test_123>',
+        accepted: ['a@b.co'],
+        rejected: [],
+      };
+    };
+
+    smtp.verify = async () => {
+      if (mode === 'verify-reject') {
+        throw new Error('SMTP verification failed');
+      }
+      return true;
+    };
 
     await withEnv({
-      RESEND_API_KEY: 're_test_key',
-      EMAIL_FROM: 'AgroConnect <onboarding@resend.dev>',
+      SMTP_HOST: 'smtp.example.test',
+      SMTP_PORT: '587',
+      SMTP_USER: 'smtp-user@example.test',
+      SMTP_PASS: 'test-password-not-real',
+      EMAIL_USER: '',
+      EMAIL_PASS: '',
+      EMAIL_FROM: 'AgroConnect <no-reply@example.test>',
     }, async () => {
-      sendImpl = async () => ({
-        data: null,
-        error: { message: 'Recipient rejected by provider' },
+      const sendEmail = load();
+      assert.equal(sendEmail.isConfigured(), true);
+
+      mode = 'reject';
+      await assert.rejects(sendEmail(msg), /Recipient rejected by SMTP/i);
+
+      mode = 'success';
+      const info = await sendEmail(msg);
+
+      assert.equal(info.messageId, '<smtp_test_123>');
+      assert.deepEqual(transportOptions, {
+        host: 'smtp.example.test',
+        port: 587,
+        secure: false,
+        auth: {
+          user: 'smtp-user@example.test',
+          pass: 'test-password-not-real',
+        },
       });
-      await assert.rejects(load()(msg), /Recipient rejected by provider/i);
-
-      let sentOptions;
-      sendImpl = async (opts) => {
-        sentOptions = opts;
-        return { data: { id: 'resend_test_123' }, error: null };
-      };
-
-      const info = await load()(msg);
-      assert.equal(info.id, 'resend_test_123');
-      assert.deepEqual(sentOptions.to, ['a@b.co']);
+      assert.equal(sentOptions.from, 'AgroConnect <no-reply@example.test>');
+      assert.equal(sentOptions.to, 'a@b.co');
       assert.equal(sentOptions.subject, 'Test subject');
       assert.equal(sentOptions.text, 'Test message');
-      assert.equal(sentOptions.from, 'AgroConnect <onboarding@resend.dev>');
+      assert.equal(sentOptions.html, '<p>Test message</p>');
 
-      sendImpl = async () => {
-        throw new Error('Resend connection failed');
-      };
-      await assert.rejects(load()(msg), /Resend connection failed/i);
+      assert.equal(await sendEmail.verifyTransport(), true);
+
+      mode = 'verify-reject';
+      await assert.rejects(sendEmail.verifyTransport(), /SMTP verification failed/i);
     });
   } finally {
-    Module._load = realLoad;
+    fakeNodemailer.createTransport = originalCreateTransport;
+    smtp.sendMail = originalSendMail;
+    smtp.verify = originalVerify;
     delete require.cache[require.resolve('../utils/sendEmail')];
   }
 });

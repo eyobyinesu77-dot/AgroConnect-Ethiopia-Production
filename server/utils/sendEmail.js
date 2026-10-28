@@ -1,68 +1,78 @@
-const { Resend } = require('resend');
+const nodemailer = require('nodemailer');
 
-let resendClient = null;
+let transporter = null;
 
-const isConfigured = () =>
-  Boolean(process.env.RESEND_API_KEY);
+const getConfig = () => {
+  const host = process.env.SMTP_HOST || 'smtp.gmail.com';
+  const port = Number(process.env.SMTP_PORT || 587);
+  const user = process.env.SMTP_USER || process.env.EMAIL_USER;
+  const pass = process.env.SMTP_PASS || process.env.EMAIL_PASS;
+  const from = process.env.EMAIL_FROM || user;
 
-const getResend = () => {
-  if (resendClient) return resendClient;
-
-  if (!isConfigured()) return null;
-
-  resendClient = new Resend(process.env.RESEND_API_KEY);
-  return resendClient;
-};
-
-// options: { email, subject, message (plain text), html (optional) }
-const sendEmailOptions = async (options) => {
-  if (!isConfigured()) {
+  if (!user || !pass) {
     throw new Error(
-      'Email is not configured. Set RESEND_API_KEY in the server environment.'
+      'Email is not configured. Set SMTP_USER and SMTP_PASS in the server environment.'
     );
   }
 
-  const resend = getResend();
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error('SMTP_PORT must be a valid TCP port.');
+  }
+
+  return { host, port, user, pass, from };
+};
+
+const getTransporter = () => {
+  if (transporter) return transporter;
+
+  const { host, port, user, pass } = getConfig();
+
+  transporter = nodemailer.createTransport({
+    host,
+    port,
+    secure: port === 465,
+    auth: { user, pass },
+  });
+
+  return transporter;
+};
+
+const sendEmailOptions = async (options) => {
+  if (!options || !options.email || !options.subject) {
+    throw new Error('Email recipient and subject are required.');
+  }
+
+  const { from } = getConfig();
 
   try {
-    const { data, error } = await resend.emails.send({
-      from:
-        process.env.EMAIL_FROM ||
-        'AgroConnect Ethiopia <onboarding@resend.dev>',
-      to: [options.email],
+    const info = await getTransporter().sendMail({
+      from,
+      to: options.email,
       subject: options.subject,
-      text: options.message,
-      html: options.html,
+      text: options.message || '',
+      ...(options.html ? { html: options.html } : {}),
     });
 
-    if (error) {
-      console.error('❌ Resend email error:', error);
-      throw new Error(error.message || 'Failed to send email');
-    }
-
-    if (!data || !data.id) {
-      throw new Error('Resend did not return an email ID');
-    }
-
-    console.log(`✉️ Email sent successfully via Resend: ${data.id}`);
-    return data;
+    console.log(`Email accepted by SMTP for ${options.email}: ${info.messageId}`);
+    return info;
   } catch (err) {
-    console.error('❌ Failed to send email via Resend:', err);
+    console.error('Failed to send email via SMTP:', err.message);
     throw err;
   }
 };
 
-// Kept for compatibility with existing verification scripts.
 sendEmailOptions.verifyTransport = async () => {
-  if (!isConfigured()) {
-    throw new Error(
-      'Email is not configured. Set RESEND_API_KEY in the server environment.'
-    );
-  }
-
-  return true;
+  getConfig();
+  return getTransporter().verify();
 };
 
-sendEmailOptions.isConfigured = isConfigured;
+sendEmailOptions.isConfigured = () => {
+  try {
+    getConfig();
+    return true;
+  } catch {
+    return false;
+  }
+};
 
 module.exports = sendEmailOptions;
