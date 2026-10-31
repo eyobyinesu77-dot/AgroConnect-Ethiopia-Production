@@ -80,6 +80,7 @@ import ExtensionCropConditions from '../pages/extension/CropConditions';
 import ExtensionMessages from '../pages/extension/Messages';
 import ExtensionProfile from '../pages/extension/Profile';
 import ExtensionSettings from '../pages/extension/Settings';
+import TransportProviderDashboard from '../pages/provider/Dashboard';
 
 // NotFound
 import NotFound from '../pages/public/NotFound';
@@ -190,6 +191,9 @@ export default function AppRoutes() {
       <Route path="/extension/messages" element={withDashboard(ExtensionMessages, ['extension'])} />
       <Route path="/extension/profile" element={withDashboard(ExtensionProfile, ['extension'])} />
       <Route path="/extension/settings" element={withDashboard(ExtensionSettings, ['extension'])} />
+
+      {/* Transport Provider Routes */}
+      <Route path="/provider/dashboard" element={withDashboard(TransportProviderDashboard, ['transport_provider'])} />
 
       {/* Fallback */}
       <Route path="*" element={<NotFound />} />

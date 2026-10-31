@@ -6,6 +6,10 @@ const { authorizeRoles } = require('../middleware/roleMiddleware');
 
 router.use(protect);
 
+// Transport provider's own allocations; these routes must precede '/:id'.
+router.get('/provider/allocations', authorizeRoles('transport_provider'), c.getMyAllocations);
+router.patch('/provider/allocations/:allocationId/status', authorizeRoles('transport_provider'), c.updateMyAllocationStatus);
+
 // Aggregation (admin) — declared before '/:id' routes so paths don't collide.
 router.get('/aggregation/suggestions', authorizeRoles('admin'), c.getAggregationSuggestions);
 router.get('/aggregation/batches', authorizeRoles('admin'), c.getBatches);

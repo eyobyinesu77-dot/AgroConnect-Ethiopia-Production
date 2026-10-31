@@ -8,6 +8,7 @@ const {
   getBuyers,
   getExtensionWorkers,
   createExtensionWorker,
+  createTransportProviderAccount,
   assignExtensionWorker,
 } = require('../controllers/adminController');
 const { protect } = require('../middleware/authMiddleware');
@@ -22,6 +23,7 @@ router.get('/farmers', getFarmers);
 router.get('/buyers', getBuyers);
 router.get('/extension-workers', getExtensionWorkers);
 router.post('/extension-workers', createExtensionWorker);
+router.post('/transport-providers/:providerId/account', createTransportProviderAccount);
 router.patch('/farmers/:farmerId/assign-extension-worker', assignExtensionWorker);
 
 module.exports = router;

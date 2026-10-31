@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { logisticsService } from '../../services/logisticsService';
+import { adminService } from '../../services/adminService';
 import { logisticsRegions, vehicleTypes } from '../../utils/constants';
 import { useLanguage } from '../../context/LanguageContext';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
@@ -95,6 +96,24 @@ export default function AdminTransportProviders() {
   };
 
 
+  const handleCreateAccount = async (provider) => {
+    const email = window.prompt('Enter login email for ' + provider.name + ':');
+    if (!email || !email.trim()) return;
+
+    try {
+      const result = await adminService.createTransportProviderAccount(provider._id, email.trim());
+      window.alert(
+        'Account created for ' + provider.name +
+        '\nEmail: ' + email.trim() +
+        '\nTemporary password: ' + result.temporaryPassword +
+        '\n\nShare these credentials securely. The provider must change the password at first login.'
+      );
+      toast.success('Provider account created.');
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Could not create provider account.');
+    }
+  };
+
   if (loading) return <LoadingSpinner fullScreen={false} label={t('common_loading')} />;
 
   return (
@@ -163,6 +182,7 @@ export default function AdminTransportProviders() {
                   <td style={{ padding: '0.7rem' }}>{p.regionsServed.join(', ')}</td>
                   <td style={{ padding: '0.7rem' }}>{p.isAvailable ? t('lg_available') : t('lg_unavailable')}</td>
                   <td style={{ padding: '0.7rem', whiteSpace: 'nowrap' }}>
+                    <button onClick={() => handleCreateAccount(p)} style={{ marginRight: '0.4rem', cursor: 'pointer' }}>Create login</button>
                     <button onClick={() => setForm({ ...p })} style={{ marginRight: '0.4rem', cursor: 'pointer' }}>{t('lg_edit')}</button>
                     <button onClick={() => handleDelete(p._id)} style={{ color: '#c62828', cursor: 'pointer' }}>{t('lg_delete')}</button>
                   </td>

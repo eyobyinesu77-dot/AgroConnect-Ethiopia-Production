@@ -17,7 +17,7 @@ const userSchema = new mongoose.Schema({
       return this.role === 'farmer' || this.role === 'buyer' || this.role === 'extension';
     }
   },
-  role: { type: String, enum: ['admin', 'farmer', 'buyer', 'extension'], default: 'farmer' },
+  role: { type: String, enum: ['admin', 'farmer', 'buyer', 'extension', 'transport_provider'], default: 'farmer' },
   // Address fields: collected during registration for admin/extension,
   // during profile completion for farmers, optional for buyers
   region: { type: String },
@@ -59,6 +59,12 @@ const userSchema = new mongoose.Schema({
   // and intentionally still not gated by this field; this field is used
   // for extensionController.getFarmersList (an extension worker's own
   // farmer roster) and for future features that need a specific pairing.
+  // Linked TransportProvider directory record for transport-provider accounts.
+  transportProvider: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'TransportProvider',
+    default: null,
+  },
   assignedExtensionWorker: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
 }, { timestamps: true });
 

@@ -3,6 +3,8 @@ const Order = require('../models/Order');
 const Payment = require('../models/Payment');
 const Product = require('../models/Product');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
+const TransportProvider = require('../models/TransportProvider');
 const { EXTENSION_WORKER_PHONE_REGEX, normalizePhone } = require('../utils/phoneValidation');
 const ACTIVE_WINDOW_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
@@ -123,6 +125,68 @@ const createExtensionWorker = async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
+  }
+};
+
+
+// Admin-only: create a login account for an existing transport provider.
+// The temporary password is returned once and must be changed on first login.
+const createTransportProviderAccount = async (req, res) => {
+  try {
+    const providerId = req.params.providerId;
+    const email = String(req.body.email || '').trim().toLowerCase();
+
+    if (!/^[a-fA-F0-9]{24}$/.test(providerId)) {
+      return res.status(400).json({ message: 'Invalid transport provider id.' });
+    }
+
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ message: 'A valid email address is required.' });
+    }
+
+    const provider = await TransportProvider.findById(providerId);
+    if (!provider) {
+      return res.status(404).json({ message: 'Transport provider not found.' });
+    }
+
+    if (await User.findOne({ email })) {
+      return res.status(409).json({ message: 'This email is already registered.' });
+    }
+
+    if (await User.findOne({ transportProvider: provider._id })) {
+      return res.status(409).json({ message: 'This provider already has a login account.' });
+    }
+
+    const temporaryPassword = crypto.randomBytes(12).toString('hex');
+    const hashedPassword = await bcrypt.hash(temporaryPassword, 10);
+
+    const user = await User.create({
+      fullName: provider.name,
+      email,
+      password: hashedPassword,
+      role: 'transport_provider',
+      transportProvider: provider._id,
+      mustChangePassword: true,
+      createdBy: req.user._id,
+    });
+
+    return res.status(201).json({
+      message: 'Transport provider account created successfully.',
+      user: {
+        _id: user._id,
+        fullName: user.fullName,
+        email: user.email,
+        role: user.role,
+        transportProvider: provider._id,
+      },
+      temporaryPassword,
+    });
+  } catch (error) {
+    console.error('Transport provider account creation error:', error);
+    if (error.code === 11000) {
+      return res.status(409).json({ message: 'An account with these details already exists.' });
+    }
+    return res.status(500).json({ message: 'Unable to create transport provider account.' });
   }
 };
 
@@ -288,5 +352,6 @@ module.exports = {
   getBuyers: getUsersByRole('buyer'),
   getExtensionWorkers: getUsersByRole('extension'),
   createExtensionWorker,
+  createTransportProviderAccount,
   assignExtensionWorker,
 };

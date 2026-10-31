@@ -46,6 +46,7 @@ export function getPostLoginRedirectPath(user) {
   const roleRoutes = {
     buyer: '/buyer/marketplace',
     extension: '/extension/dashboard',
+    transport_provider: '/provider/dashboard',
     admin: '/admin/dashboard',
   };
 

@@ -18,6 +18,7 @@ export default function ChangePassword() {
     farmer: '/farmer/dashboard',
     buyer: '/buyer/dashboard',
     extension: '/extension/dashboard',
+    transport_provider: '/provider/dashboard',
     admin: '/admin/dashboard',
   }[user?.role] || '/';
 

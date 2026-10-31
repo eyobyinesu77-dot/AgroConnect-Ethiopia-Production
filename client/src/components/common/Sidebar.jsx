@@ -4,6 +4,7 @@ import AdminSidebar from '../sidebars/AdminSidebar';
 import FarmerSidebar from '../sidebars/FarmerSidebar';
 import BuyerSidebar from '../sidebars/BuyerSidebar';
 import ExtensionSidebar from '../sidebars/ExtensionSidebar';
+import TransportProviderSidebar from '../sidebars/TransportProviderSidebar';
 import LogoImage from '../LogoImage';
 import { useLanguage } from '../../context/LanguageContext';
 
@@ -12,6 +13,7 @@ const SIDEBAR_BY_ROLE = {
   farmer: FarmerSidebar,
   buyer: BuyerSidebar,
   extension: ExtensionSidebar,
+  transport_provider: TransportProviderSidebar,
 };
 
 // One shared shell for all four role dashboards (admin / farmer / buyer /

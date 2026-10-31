@@ -32,5 +32,12 @@ export const adminService = {
   assignExtensionWorker: async (farmerId, extensionWorkerId) => {
     const response = await API.patch(`/admin/farmers/${farmerId}/assign-extension-worker`, { extensionWorkerId });
     return response.data;
+  },
+  createTransportProviderAccount: async (providerId, email) => {
+    const response = await API.post(
+      `/admin/transport-providers/${providerId}/account`,
+      { email }
+    );
+    return response.data;
   }
 };

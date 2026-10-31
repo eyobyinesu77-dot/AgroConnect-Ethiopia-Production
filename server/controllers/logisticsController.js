@@ -869,6 +869,59 @@ const updateAllocationStatus = async (req, res) => {
   }
 };
 
+
+// Provider-only: return allocations belonging to the authenticated provider.
+const getMyAllocations = async (req, res) => {
+  try {
+    const providerId = req.user.transportProvider;
+
+    if (!providerId) {
+      return res.status(403).json({ message: 'No transport provider is linked to this account.' });
+    }
+
+    const allocations = await TransportAllocation.find({ provider: providerId })
+      .sort({ createdAt: -1 })
+      .populate('batch')
+      .populate(
+        'requestPortions.request',
+        'cropName quantityKg allocatedQuantityKg pickupRegion pickupZone pickupWoreda destinationRegion destinationAddress preferredDate status'
+      );
+
+    return res.json(allocations);
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+// Provider-only: verify allocation ownership before reusing the existing
+// transaction-based status updater.
+const updateMyAllocationStatus = async (req, res) => {
+  try {
+    const providerId = req.user.transportProvider;
+
+    if (!providerId) {
+      return res.status(403).json({ message: 'No transport provider is linked to this account.' });
+    }
+
+    if (!isValidId(req.params.allocationId)) {
+      return res.status(400).json({ message: 'Invalid allocation id.' });
+    }
+
+    const allocation = await TransportAllocation.findOne({
+      _id: req.params.allocationId,
+      provider: providerId,
+    }).select('_id');
+
+    if (!allocation) {
+      return res.status(404).json({ message: 'Transport allocation not found for this provider.' });
+    }
+
+    return updateAllocationStatus(req, res);
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
 // ============================== Aggregation ================================
 
 // GET /api/logistics/aggregation/suggestions (admin)
@@ -1401,5 +1454,6 @@ module.exports = {
   getRequestMatches, assignProvider, allocateRequest, updateRequestStatus,
   getAggregationSuggestions, createBatch, getBatches, assignBatchProvider,
   allocateBatch, updateAllocationStatus,
+  getMyAllocations, updateMyAllocationStatus,
   findMatchingProviders,
 };

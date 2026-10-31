@@ -27,4 +27,16 @@ export const logisticsService = {
     (await API.post('/logistics/aggregation/batches', { requestIds, providerId })).data,
   allocateBatch: async (id, providerId, portions) =>
     (await API.post(`/logistics/aggregation/batches/${id}/allocations`, { providerId, portions })).data,
+
+  // Requests (transport provider)
+  getMyAllocations: async () => {
+    const payload = (await API.get('/logistics/provider/allocations')).data;
+    if (Array.isArray(payload)) return payload;
+    return payload?.data || payload?.allocations || [];
+  },
+  updateMyAllocationStatus: async (allocationId, status) =>
+    (await API.patch(
+      '/logistics/provider/allocations/' + allocationId + '/status',
+      { status }
+    )).data,
 };
